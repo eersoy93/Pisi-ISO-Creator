@@ -28,9 +28,9 @@ component ListEditor inherits VerticalLayout {
 export component AppWindow inherits Window {
     title: "Pisi ISO Creator";
     preferred-width: 1100px;
-    preferred-height: 800px;
-    min-width: 800px;
-    min-height: 600px;
+    preferred-height: 700px;
+    min-width: 760px;
+    min-height: 520px;
 
     // ---- Project ----
     in-out property <string> project-path: "pisi-project.toml";
@@ -163,27 +163,29 @@ export component AppWindow inherits Window {
             Tab {
                 title: "Packages";
                 HorizontalBox {
-                    VerticalBox {
+                    ScrollView {
                         horizontal-stretch: 1;
-                        ListEditor {
-                            title: "PiSi repositories";
-                            hint: "One '<name> <pisi-index.xml(.xz) URL>' per line.";
-                            text <=> root.repositories;
-                        }
-                        ListEditor {
-                            title: "Components";
-                            hint: "Installed with 'pisi install -c', e.g. system.base.";
-                            text <=> root.components;
-                        }
-                        ListEditor {
-                            title: "Packages";
-                            hint: "One package per line (dependencies are resolved by PiSi).";
-                            text <=> root.packages;
-                        }
-                        ListEditor {
-                            title: "Excluded packages";
-                            hint: "Removed after installation.";
-                            text <=> root.excluded-packages;
+                        VerticalBox {
+                            ListEditor {
+                                title: "PiSi repositories";
+                                hint: "One '<name> <pisi-index.xml(.xz) URL>' per line.";
+                                text <=> root.repositories;
+                            }
+                            ListEditor {
+                                title: "Components";
+                                hint: "Installed with 'pisi install -c', e.g. system.base.";
+                                text <=> root.components;
+                            }
+                            ListEditor {
+                                title: "Packages";
+                                hint: "One package per line (dependencies are resolved by PiSi).";
+                                text <=> root.packages;
+                            }
+                            ListEditor {
+                                title: "Excluded packages";
+                                hint: "Removed after installation.";
+                                text <=> root.excluded-packages;
+                            }
                         }
                     }
                     GroupBox {
@@ -219,7 +221,7 @@ export component AppWindow inherits Window {
                             Text {
                                 text: root.package-details;
                                 wrap: word-wrap;
-                                min-height: 90px;
+                                min-height: 60px;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -331,9 +333,9 @@ export component AppWindow inherits Window {
         Text { text: root.status-text; wrap: word-wrap; }
         log-view := ScrollView {
             vertical-stretch: 2;
-            min-height: 160px;
-            viewport-width: max(self.visible-width, log-label.preferred-width + 8px);
-            viewport-height: max(self.visible-height, log-label.preferred-height + 8px);
+            min-height: 100px;
+            content-width: max(self.visible-width, log-label.preferred-width + 8px);
+            content-height: max(self.visible-height, log-label.preferred-height + 8px);
             log-label := Text {
                 x: 4px;
                 y: 4px;
@@ -347,6 +349,6 @@ export component AppWindow inherits Window {
 
     // Keep the newest log output visible.
     changed log-text => {
-        log-view.viewport-y = min(0px, log-view.visible-height - log-view.viewport-height);
+        log-view.content-y = min(0px, log-view.visible-height - log-view.content-height);
     }
 }
