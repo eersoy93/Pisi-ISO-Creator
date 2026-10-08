@@ -112,3 +112,7 @@ Source layout:
 - `src/command.rs` – step executor (logging, dry run, cancellation, cleanup)
 - `src/gui.rs`, `ui/app.slint` – Slint user interface
 - `src/main.rs` – command line entry point
+
+## Copyright and License
+
+See [LICENSE](LICENSE) file.
