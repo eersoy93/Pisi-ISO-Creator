@@ -80,6 +80,12 @@ pub enum Action {
     Run(Cmd),
     /// `mkdir -p`
     CreateDir(PathBuf),
+    /// Creates a mount point below `root`, refusing paths that pass through
+    /// symbolic links (which could redirect a mount onto the host).
+    CreateMountPoint {
+        root: PathBuf,
+        path: PathBuf,
+    },
     /// Removes a directory tree if it exists. Refuses to follow active mounts.
     RemoveDir(PathBuf),
     WriteFile {
@@ -172,7 +178,9 @@ fn describe_action(action: &Action) -> String {
     match action {
         Action::Run(cmd) if cmd.allow_failure => format!("{cmd} || true"),
         Action::Run(cmd) => cmd.to_string(),
-        Action::CreateDir(p) => format!("mkdir -p {}", quote_path(p)),
+        Action::CreateDir(p) | Action::CreateMountPoint { path: p, .. } => {
+            format!("mkdir -p {}", quote_path(p))
+        }
         Action::RemoveDir(p) => format!("rm -rf --one-file-system {}", quote_path(p)),
         Action::WriteFile { path, contents } => format!(
             "cat > {} <<'EOF'\n{}{}EOF",
@@ -339,6 +347,7 @@ impl Executor {
             Action::CreateDir(p) => {
                 fs::create_dir_all(p).map_err(|e| format!("cannot create {}: {e}", p.display()))
             }
+            Action::CreateMountPoint { root, path } => create_mount_point(root, path),
             Action::RemoveDir(p) => remove_dir(p),
             Action::WriteFile { path, contents } => {
                 if let Some(parent) = path.parent() {
@@ -494,6 +503,31 @@ pub fn mksquashfs(rootfs: &Path, image: &Path, compression: &str) -> Cmd {
     } else {
         cmd
     }
+}
+
+fn create_mount_point(root: &Path, path: &Path) -> Result<(), String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| format!("{} is not below {}", path.display(), root.display()))?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(format!(
+                    "refusing to mount on {}: it is a symbolic link",
+                    current.display()
+                ));
+            }
+            Ok(meta) if !meta.is_dir() => {
+                return Err(format!("{} is not a directory", current.display()));
+            }
+            Ok(_) => {}
+            Err(_) => fs::create_dir(&current)
+                .map_err(|e| format!("cannot create {}: {e}", current.display()))?,
+        }
+    }
+    Ok(())
 }
 
 /// Removes a directory tree without crossing into mounted file systems.
@@ -810,6 +844,20 @@ mod tests {
             missing_tools(&["no-such-tool-xyz"]),
             vec!["no-such-tool-xyz"]
         );
+    }
+
+    #[test]
+    fn mount_points_reject_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        create_mount_point(root, &root.join("dev/pts")).unwrap();
+        assert!(root.join("dev/pts").is_dir());
+        create_mount_point(root, &root.join("dev/pts")).unwrap();
+        std::os::unix::fs::symlink("/etc", root.join("proc")).unwrap();
+        assert!(create_mount_point(root, &root.join("proc")).is_err());
+        std::os::unix::fs::symlink("/", root.join("run")).unwrap();
+        assert!(create_mount_point(root, &root.join("run/x")).is_err());
+        assert!(create_mount_point(root, Path::new("/elsewhere")).is_err());
     }
 
     #[test]

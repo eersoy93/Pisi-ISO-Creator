@@ -6,7 +6,6 @@ use crate::pisi::{Pisi, chroot};
 use crate::project::{EditJob, Project};
 use std::path::{Path, PathBuf};
 
-const POST_INSTALL_SCRIPT: &str = "tmp/pisi-iso-post-install.sh";
 const LIVE_INITRD: &str = "/boot/initrd.live";
 const LIVE_MKINITCPIO_CONF: &str = "etc/mkinitcpio-live.conf";
 /// Location of the root file system image expected by the `live` hook of
@@ -335,7 +334,10 @@ fn enter_chroot_steps(rootfs: &Path, with_dbus: bool) -> Vec<Step> {
     for (dir, cmd) in api_mounts(rootfs) {
         steps.push(Step::new(
             format!("Create {}", dir.display()),
-            Action::CreateDir(dir.clone()),
+            Action::CreateMountPoint {
+                root: rootfs.to_path_buf(),
+                path: dir.clone(),
+            },
         ));
         steps.push(Step::run(format!("Mount {}", dir.display()), cmd));
     }
@@ -406,30 +408,18 @@ fn cleanup_steps(rootfs: &Path) -> Vec<Step> {
     unmount_steps(rootfs)
 }
 
+/// The script is passed as an argument to `sh -c`, so nothing is written
+/// into the (possibly untrusted) image.
 fn post_install_steps(rootfs: &Path, script: &str) -> Vec<Step> {
     if script.trim().is_empty() {
         return vec![];
     }
-    let path = rootfs.join(POST_INSTALL_SCRIPT);
-    vec![
-        Step::new(
-            "Write post-install script",
-            Action::WriteFile {
-                path: path.clone(),
-                contents: format!("{}\n", script.trim_end()),
-            },
-        ),
-        Step::run(
-            "Run post-install script in chroot",
-            chroot(rootfs, "/bin/sh")
-                .arg("-e")
-                .arg(format!("/{POST_INSTALL_SCRIPT}")),
-        ),
-        Step::run(
-            "Remove post-install script",
-            Cmd::new("rm").arg("-f").arg(path),
-        ),
-    ]
+    vec![Step::run(
+        "Run post-install script in chroot",
+        chroot(rootfs, "/bin/sh")
+            .args(["-e", "-c"])
+            .arg(script.trim_end()),
+    )]
 }
 
 /// mkinitcpio configuration for a generic (not host specific) live initramfs
@@ -520,7 +510,7 @@ mod tests {
             "mount -t proc proc /w/rootfs/proc",
             "configure-pending baselayout",
             "useradd -m",
-            "/bin/sh -e /tmp/pisi-iso-post-install.sh",
+            "/bin/sh -e -c 'echo hi'",
             "mkinitcpio -k",
             "delete-cache",
             "mksquashfs /w/rootfs /w/iso/live/pisi.sfs -noappend -comp xz",

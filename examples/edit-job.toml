@@ -1,0 +1,18 @@
+# Example ISO edit job: pisi-iso-creator edit examples/edit-job.toml --plan
+input_iso = "PisiLinux-2.4-Xfce.iso"
+output_iso = "PisiLinux-2.4-Xfce-custom.iso"
+work_dir = "/var/tmp/pisi-iso-editor"
+# Empty keeps the original label.
+volume_label = ""
+upgrade = false
+install_packages = ["htop", "git"]
+remove_packages = []
+squashfs_compression = "xz"
+post_install_script = """
+echo "Customized with Pisi ISO Creator" > /etc/motd
+"""
+
+# Extra repositories added to the image before packages are installed.
+# [[repositories]]
+# name = "extra"
+# url = "https://example.org/pisi/pisi-index.xml.xz"
