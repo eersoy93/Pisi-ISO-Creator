@@ -51,7 +51,7 @@ export component AppWindow inherits Window {
     in-out property <string> packages;
     in-out property <string> excluded-packages;
     in-out property <string> index-source;
-    in-out property <string> index-status: "No repository index loaded.";
+    in-out property <string> index-status: "No repository index loaded!";
     in-out property <string> search-text;
     in property <[StandardListViewItem]> search-results;
     in-out property <int> selected-result: -1;
@@ -149,9 +149,9 @@ export component AppWindow inherits Window {
                     HorizontalBox {
                         alignment: end;
                         Button { text: "Validate"; clicked => { root.validate-project(); } }
-                        Button { text: "Show build plan"; clicked => { root.show-plan(); } }
+                        Button { text: "Show Build Plan"; clicked => { root.show-plan(); } }
                         Button {
-                            text: root.dry-run ? "Build ISO (dry run)" : "Build ISO";
+                            text: root.dry-run ? "Build ISO (Dry Run)" : "Build ISO";
                             primary: true;
                             enabled: !root.running;
                             clicked => { root.build-iso(); }
@@ -167,7 +167,7 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
                         VerticalBox {
                             ListEditor {
-                                title: "PiSi repositories";
+                                title: "PiSi Repositories";
                                 hint: "One '<name> <pisi-index.xml(.xz) URL>' per line.";
                                 text <=> root.repositories;
                             }
@@ -182,14 +182,14 @@ export component AppWindow inherits Window {
                                 text <=> root.packages;
                             }
                             ListEditor {
-                                title: "Excluded packages";
+                                title: "Excluded Packages";
                                 hint: "Removed after installation.";
                                 text <=> root.excluded-packages;
                             }
                         }
                     }
                     GroupBox {
-                        title: "Repository browser";
+                        title: "Repository Browser";
                         horizontal-stretch: 1;
                         VerticalLayout {
                             spacing: 6px;
@@ -201,7 +201,7 @@ export component AppWindow inherits Window {
                                     accepted => { root.load-index(); }
                                 }
                                 Button {
-                                    text: "Load index";
+                                    text: "Load Index";
                                     enabled: !root.index-loading;
                                     clicked => { root.load-index(); }
                                 }
@@ -226,17 +226,17 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: "Add to packages";
+                                    text: "Add to Packages";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("packages"); }
                                 }
                                 Button {
-                                    text: "Add to excluded";
+                                    text: "Add to Excluded";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("excluded"); }
                                 }
                                 Button {
-                                    text: "Install into edited ISO";
+                                    text: "Install into Edited ISO";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("edit-install"); }
                                 }
@@ -276,23 +276,23 @@ export component AppWindow inherits Window {
                             HorizontalBox {
                                 padding: 0;
                                 ListEditor {
-                                    title: "Packages to install";
+                                    title: "Packages to Install";
                                     hint: "One per line.";
                                     text <=> root.edit-install;
                                 }
                                 ListEditor {
-                                    title: "Packages to remove";
+                                    title: "Packages to Remove";
                                     hint: "One per line.";
                                     text <=> root.edit-remove;
                                 }
                             }
                             ListEditor {
-                                title: "Additional repositories";
+                                title: "Additional Repositories";
                                 hint: "One '<name> <pisi-index.xml(.xz) URL>' per line, added to the image.";
                                 text <=> root.edit-repositories;
                             }
                             ListEditor {
-                                title: "Post-install script";
+                                title: "Post-Install Script";
                                 hint: "Shell script run inside the image's chroot (/bin/sh -e).";
                                 text <=> root.edit-script;
                             }
@@ -300,9 +300,9 @@ export component AppWindow inherits Window {
                     }
                     HorizontalBox {
                         alignment: end;
-                        Button { text: "Show edit plan"; clicked => { root.show-edit-plan(); } }
+                        Button { text: "Show Edit Plan"; clicked => { root.show-edit-plan(); } }
                         Button {
-                            text: root.dry-run ? "Edit ISO (dry run)" : "Edit ISO";
+                            text: root.dry-run ? "Edit ISO (Dry Run)" : "Edit ISO";
                             primary: true;
                             enabled: !root.running;
                             clicked => { root.edit-iso(); }
@@ -328,7 +328,7 @@ export component AppWindow inherits Window {
                 }
             }
             Button { text: "Cancel"; enabled: root.running; clicked => { root.cancel(); } }
-            Button { text: "Clear log"; clicked => { root.clear-log(); } }
+            Button { text: "Clear Log"; clicked => { root.clear-log(); } }
         }
         Text { text: root.status-text; wrap: word-wrap; }
         log-view := ScrollView {
