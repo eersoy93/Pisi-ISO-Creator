@@ -1,0 +1,22 @@
+name = "Pisi GNU/Linux"
+version = "2.0"
+volume_label = "PISI_LIVE"
+hostname = "pisi"
+live_user = "pisi"
+components = ["system.base"]
+packages = [
+    "kernel",
+    "mkinitcpio",
+    "grub2",
+]
+excluded_packages = []
+work_dir = "/var/tmp/pisi-iso-creator"
+output_iso = "pisi-live.iso"
+squashfs_compression = "xz"
+kernel_cmdline = "quiet splash"
+live_initramfs = true
+post_install_script = ""
+
+[[repositories]]
+name = "pisi-2.0"
+url = "https://ciftlik.pisilinux.org/pisi-2.0/pisi-index.xml.xz"
