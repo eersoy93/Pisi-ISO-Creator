@@ -1,3 +1,3 @@
 fn main() {
-    slint_build::compile("ui/app.slint").expect("failed to compile the Slint UI");
+    slint_build::compile("ui/app.slint").expect("Failed to compile the Slint UI!");
 }
