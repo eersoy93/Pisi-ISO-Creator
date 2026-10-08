@@ -50,7 +50,7 @@ The host is best a Pisi GNU/Linux system, so that the host `pisi` matches the
 PiSi database format of the image. Missing tools are reported before a run
 starts.
 
-## Build and run
+## Building and Running
 
 ```sh
 cargo build --release
@@ -69,7 +69,7 @@ pisi-iso-creator search <index URL or path> [query]       search a PiSi reposito
 `--plan` prints the complete pipeline as a shell-like script, `--dry-run`
 walks through all steps without executing anything (no root required).
 
-## Project file
+## Project File
 
 ```toml
 name = "Pisi GNU/Linux"
