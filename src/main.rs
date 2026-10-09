@@ -39,7 +39,7 @@ fn main() -> ExitCode {
         return match gui::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("error: cannot start the user interface: {e}");
+                eprintln!("Error: Can not start the user interface: {e}");
                 ExitCode::FAILURE
             }
         };
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     match run_cli(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: {e}");
+            eprintln!("Error: {e}");
             ExitCode::FAILURE
         }
     }
@@ -72,7 +72,7 @@ fn run_cli(args: &[String]) -> Result<(), String> {
         .iter()
         .find(|f| !matches!(**f, "--dry-run" | "--plan"))
     {
-        return Err(format!("unknown option {unknown}\n\n{USAGE}"));
+        return Err(format!("Unknown option: {unknown}\n\n{USAGE}"));
     }
     let dry_run = flags.contains(&"--dry-run");
     let plan_only = flags.contains(&"--plan");
@@ -81,7 +81,7 @@ fn run_cli(args: &[String]) -> Result<(), String> {
         ["new", path] => {
             let path = PathBuf::from(path);
             if path.exists() {
-                return Err(format!("{} already exists", path.display()));
+                return Err(format!("{} already exists!", path.display()));
             }
             Project::default().save(&path)?;
             println!("Wrote {}", path.display());
@@ -114,7 +114,7 @@ fn run_cli(args: &[String]) -> Result<(), String> {
             check(job.validate())?;
             pipeline::edit_plan(&job)
         }
-        _ => return Err(format!("invalid arguments\n\n{USAGE}")),
+        _ => return Err(format!("Invalid arguments!\n\n{USAGE}")),
     };
 
     if plan_only {
@@ -132,6 +132,6 @@ fn check(errors: Vec<String>) -> Result<(), String> {
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(format!("invalid configuration:\n  {}", errors.join("\n  ")))
+        Err(format!("Invalid configuration:\n  {}", errors.join("\n  ")))
     }
 }
