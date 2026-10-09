@@ -39,7 +39,7 @@ fn main() -> ExitCode {
         return match gui::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("Error: Can not start the user interface: {e}");
+                eprintln!("Error: Can not start the user interface: {e} !");
                 ExitCode::FAILURE
             }
         };
@@ -72,7 +72,7 @@ fn run_cli(args: &[String]) -> Result<(), String> {
         .iter()
         .find(|f| !matches!(**f, "--dry-run" | "--plan"))
     {
-        return Err(format!("Unknown option: {unknown}\n\n{USAGE}"));
+        return Err(format!("Unknown option: {unknown} !\n\n{USAGE}"));
     }
     let dry_run = flags.contains(&"--dry-run");
     let plan_only = flags.contains(&"--plan");

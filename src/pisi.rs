@@ -183,11 +183,11 @@ pub fn load_index(source: &str) -> Result<RepoIndex, String> {
         download(source)?
     } else {
         let path = source.strip_prefix("file://").unwrap_or(source);
-        let file = std::fs::File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let file = std::fs::File::open(path).map_err(|e| format!("Can not open {path}: {e} !"))?;
         let mut data = Vec::new();
         file.take(MAX_INDEX_SIZE)
             .read_to_end(&mut data)
-            .map_err(|e| format!("cannot read {path}: {e}"))?;
+            .map_err(|e| format!("Can not read {path}: {e} !"))?;
         data
     };
     parse_index(&decompress(raw)?)
@@ -207,13 +207,13 @@ fn download(url: &str) -> Result<Vec<u8>, String> {
     let mut response = agent
         .get(url)
         .call()
-        .map_err(|e| format!("Can not download {url}: {e}"))?;
+        .map_err(|e| format!("Can not download {url}: {e} !"))?;
     response
         .body_mut()
         .with_config()
         .limit(MAX_INDEX_SIZE)
         .read_to_vec()
-        .map_err(|e| format!("Can not download {url}: {e}"))
+        .map_err(|e| format!("Can not download {url}: {e} !"))
 }
 
 const XZ_MAGIC: &[u8] = &[0xFD, b'7', b'z', b'X', b'Z', 0x00];
@@ -225,7 +225,7 @@ fn decompress(raw: Vec<u8>) -> Result<Vec<u8>, String> {
     let mut out = LimitedWriter(Vec::new());
     let mut input = BufReader::new(raw.as_slice());
     lzma_rs::xz_decompress(&mut input, &mut out)
-        .map_err(|e| format!("Can not decompress index: {e}"))?;
+        .map_err(|e| format!("Can not decompress index: {e} !"))?;
     Ok(out.0)
 }
 
@@ -235,7 +235,7 @@ struct LimitedWriter(Vec<u8>);
 impl Write for LimitedWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if (self.0.len() + buf.len()) as u64 > MAX_INDEX_SIZE {
-            return Err(std::io::Error::other("Index is too large!"));
+            return Err(std::io::Error::other("Index is too large"));
         }
         self.0.extend_from_slice(buf);
         Ok(buf.len())
@@ -271,7 +271,7 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
     loop {
         let event = reader
             .read_event_into(&mut buf)
-            .map_err(|e| format!("Invalid index XML at {}: {e}", reader.buffer_position()))?;
+            .map_err(|e| format!("Invalid index XML at {}: {e} !", reader.buffer_position()))?;
         match event {
             Event::Start(e) => {
                 let name = e.local_name().as_ref().to_string();
@@ -310,7 +310,10 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
                 text.push_str(&t.xml10_content());
             }
             Event::GeneralRef(r) => {
-                if let Some(c) = r.resolve_char_ref().map_err(|e| e.to_string())? {
+                if let Some(c) = r
+                    .resolve_char_ref()
+                    .map_err(|e| format!("Invalid character reference in index: {e} !"))?
+                {
                     text.push(c);
                 } else {
                     text.push_str(match r.as_ref() {
@@ -404,7 +407,7 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
         buf.clear();
     }
     if index.packages.is_empty() && index.components.is_empty() {
-        return Err("No packages found; is this a PiSi index?".into());
+        return Err("No packages found; this is probably not a PiSi index!".into());
     }
     index.packages.sort_by(|a, b| a.name.cmp(&b.name));
     index.packages.dedup_by(|a, b| a.name == b.name);
