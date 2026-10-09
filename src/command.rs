@@ -399,7 +399,10 @@ impl Executor {
             }
             Action::UnpackSquashfs { iso_dir, rootfs } => {
                 let image = find_squashfs(iso_dir)?;
-                self.log(format!("Found root file system image {} !", image.display()));
+                self.log(format!(
+                    "Found root file system image {} !",
+                    image.display()
+                ));
                 ctx.squashfs_image = Some(image.clone());
                 let cmd = Cmd::new("unsquashfs")
                     .arg("-f")
