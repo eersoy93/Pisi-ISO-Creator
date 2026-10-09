@@ -214,7 +214,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         ui.set_search_results(ModelRc::new(VecModel::from(items)));
         ui.set_selected_result(-1);
         ui.set_package_details(if total > MAX_SEARCH_RESULTS {
-            format!("Showing {MAX_SEARCH_RESULTS} of {total} matches; refine the search.").into()
+            format!("Showing {MAX_SEARCH_RESULTS} of {total} matches; refine the search!").into()
         } else {
             format!("{total} matching package(s).").into()
         });
