@@ -338,24 +338,24 @@ impl Executor {
                 self.log(format!("$ {cmd}"));
                 match self.run_command(cmd) {
                     Err(e) if cmd.allow_failure => {
-                        self.log(format!("Warning: {e} (ignored)"));
+                        self.log(format!("Warning: Ignoring failure: {e}"));
                         Ok(())
                     }
                     other => other,
                 }
             }
             Action::CreateDir(p) => {
-                fs::create_dir_all(p).map_err(|e| format!("Can not create {}: {e}", p.display()))
+                fs::create_dir_all(p).map_err(|e| format!("Can not create {}: {e} !", p.display()))
             }
             Action::CreateMountPoint { root, path } => create_mount_point(root, path),
             Action::RemoveDir(p) => remove_dir(p),
             Action::WriteFile { path, contents } => {
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent)
-                        .map_err(|e| format!("Can not create {}: {e}", parent.display()))?;
+                        .map_err(|e| format!("Can not create {}: {e} !", parent.display()))?;
                 }
                 fs::write(path, contents)
-                    .map_err(|e| format!("Can not write {}: {e}", path.display()))
+                    .map_err(|e| format!("Can not write {}: {e} !", path.display()))
             }
             Action::WaitForFile { path, timeout_secs } => {
                 let start = Instant::now();
@@ -385,7 +385,7 @@ impl Executor {
             } => {
                 let (kernel, initramfs) = find_boot_files(rootfs, initrd.as_deref())?;
                 fs::create_dir_all(dest)
-                    .map_err(|e| format!("Can not create {}: {e}", dest.display()))?;
+                    .map_err(|e| format!("Can not create {}: {e} !", dest.display()))?;
                 for (src, name) in [(kernel, "kernel"), (initramfs, "initrd")] {
                     self.log(format!(
                         "Copy {} -> {}/{name}",
@@ -393,7 +393,7 @@ impl Executor {
                         dest.display()
                     ));
                     fs::copy(&src, dest.join(name))
-                        .map_err(|e| format!("Can not copy {}: {e}", src.display()))?;
+                        .map_err(|e| format!("Can not copy {}: {e} !", src.display()))?;
                 }
                 Ok(())
             }
@@ -433,7 +433,7 @@ impl Executor {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("Can not start {}: {e}", cmd.program.to_string_lossy()))?;
+            .map_err(|e| format!("Can not start {}: {e} !", cmd.program.to_string_lossy()))?;
 
         let readers: Vec<_> = [
             child
@@ -464,7 +464,10 @@ impl Executor {
         .collect();
 
         let status = loop {
-            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            if let Some(status) = child
+                .try_wait()
+                .map_err(|e| format!("Can not wait for {}: {e} !", cmd.program.to_string_lossy()))?
+            {
                 break status;
             }
             if self.cancel.load(Ordering::SeqCst) {
@@ -524,7 +527,7 @@ fn create_mount_point(root: &Path, path: &Path) -> Result<(), String> {
             }
             Ok(_) => {}
             Err(_) => fs::create_dir(&current)
-                .map_err(|e| format!("Can not create {}: {e}", current.display()))?,
+                .map_err(|e| format!("Can not create {}: {e} !", current.display()))?,
         }
     }
     Ok(())
@@ -535,7 +538,8 @@ fn remove_dir(path: &Path) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
-    let canonical = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let canonical =
+        fs::canonicalize(path).map_err(|e| format!("Can not resolve {}: {e} !", path.display()))?;
     if canonical == Path::new("/") {
         return Err("Refusing to remove /!".into());
     }
@@ -549,7 +553,7 @@ fn remove_dir(path: &Path) -> Result<(), String> {
             m.display()
         ));
     }
-    fs::remove_dir_all(path).map_err(|e| format!("Can not remove {}: {e}", path.display()))
+    fs::remove_dir_all(path).map_err(|e| format!("Can not remove {}: {e} !", path.display()))
 }
 
 /// Mount points from `/proc/self/mountinfo`.
@@ -654,7 +658,7 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 pub fn find_boot_files(rootfs: &Path, initrd: Option<&Path>) -> Result<(PathBuf, PathBuf), String> {
     let boot = rootfs.join("boot");
     let names: Vec<String> = fs::read_dir(&boot)
-        .map_err(|e| format!("Can not read {}: {e}", boot.display()))?
+        .map_err(|e| format!("Can not read {}: {e} !", boot.display()))?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file())
         .filter_map(|e| e.file_name().into_string().ok())
@@ -699,7 +703,8 @@ pub fn find_squashfs(dir: &Path) -> Result<PathBuf, String> {
     let mut best: Option<(u64, PathBuf)> = None;
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let entries = fs::read_dir(&d).map_err(|e| format!("Can not read {}: {e}", d.display()))?;
+        let entries =
+            fs::read_dir(&d).map_err(|e| format!("Can not read {}: {e} !", d.display()))?;
         for entry in entries.flatten() {
             let Ok(ft) = entry.file_type() else { continue };
             let path = entry.path();

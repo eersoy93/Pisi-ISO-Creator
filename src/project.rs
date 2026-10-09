@@ -91,13 +91,20 @@ impl Default for Project {
 impl Project {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = fs::read_to_string(path)
-            .map_err(|e| format!("Can not read {}: {e}", path.display()))?;
-        toml::from_str(&text).map_err(|e| format!("Invalid project file {}: {e}", path.display()))
+            .map_err(|e| format!("Can not read {}: {e} !", path.display()))?;
+        toml::from_str(&text).map_err(|e| {
+            format!(
+                "Invalid project file {}: {} !",
+                path.display(),
+                e.to_string().trim_end()
+            )
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        let text = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(path, text).map_err(|e| format!("Can not write {}: {e}", path.display()))
+        let text = toml::to_string_pretty(self)
+            .map_err(|e| format!("Can not serialize the project: {e} !"))?;
+        fs::write(path, text).map_err(|e| format!("Can not write {}: {e} !", path.display()))
     }
 
     /// Returns a list of human readable problems. An empty list means the
@@ -175,13 +182,20 @@ impl Default for EditJob {
 impl EditJob {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = fs::read_to_string(path)
-            .map_err(|e| format!("Can not read {}: {e}", path.display()))?;
-        toml::from_str(&text).map_err(|e| format!("Invalid edit job file {}: {e}", path.display()))
+            .map_err(|e| format!("Can not read {}: {e} !", path.display()))?;
+        toml::from_str(&text).map_err(|e| {
+            format!(
+                "Invalid edit job file {}: {} !",
+                path.display(),
+                e.to_string().trim_end()
+            )
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        let text = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(path, text).map_err(|e| format!("Can not write {}: {e}", path.display()))
+        let text = toml::to_string_pretty(self)
+            .map_err(|e| format!("Can not serialize the edit job: {e} !"))?;
+        fs::write(path, text).map_err(|e| format!("Can not write {}: {e} !", path.display()))
     }
 
     pub fn validate(&self) -> Vec<String> {
