@@ -90,8 +90,8 @@ impl Default for Project {
 
 impl Project {
     pub fn load(path: &Path) -> Result<Self, String> {
-        let text =
-            fs::read_to_string(path).map_err(|e| format!("Can not read {}: {e}", path.display()))?;
+        let text = fs::read_to_string(path)
+            .map_err(|e| format!("Can not read {}: {e}", path.display()))?;
         toml::from_str(&text).map_err(|e| format!("Invalid project file {}: {e}", path.display()))
     }
 
@@ -112,10 +112,10 @@ impl Project {
         }
         check_volume_label(&self.volume_label, &mut errors);
         if !self.hostname.is_empty() && !is_valid_hostname(&self.hostname) {
-            errors.push(format!("Invalid hostname '{}'.", self.hostname));
+            errors.push(format!("Invalid hostname '{}'!", self.hostname));
         }
         if !self.live_user.is_empty() && !is_valid_user_name(&self.live_user) {
-            errors.push(format!("Invalid live user name '{}'.", self.live_user));
+            errors.push(format!("Invalid live user name '{}'!", self.live_user));
         }
         if self.repositories.is_empty() {
             errors.push("At least one PiSi repository is required!".into());
@@ -174,14 +174,14 @@ impl Default for EditJob {
 
 impl EditJob {
     pub fn load(path: &Path) -> Result<Self, String> {
-        let text =
-            fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        toml::from_str(&text).map_err(|e| format!("invalid edit job file {}: {e}", path.display()))
+        let text = fs::read_to_string(path)
+            .map_err(|e| format!("Can not read {}: {e}", path.display()))?;
+        toml::from_str(&text).map_err(|e| format!("Invalid edit job file {}: {e}", path.display()))
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let text = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+        fs::write(path, text).map_err(|e| format!("Can not write {}: {e}", path.display()))
     }
 
     pub fn validate(&self) -> Vec<String> {
@@ -252,7 +252,7 @@ fn check_paths(work_dir: &Path, output_iso: &Path, errors: &mut Vec<String>) {
 
 fn check_compression(compression: &str, errors: &mut Vec<String>) {
     if !COMPRESSIONS.contains(&compression) {
-        errors.push(format!("Unsupported SquashFS compression '{compression}'."));
+        errors.push(format!("Unsupported SquashFS compression '{compression}'!"));
     }
 }
 
@@ -325,7 +325,7 @@ pub fn parse_repositories(text: &str) -> Result<Vec<Repository>, String> {
             (Some(name), Some(url), None) => repos.push(Repository::new(name, url)),
             _ => {
                 return Err(format!(
-                    "Repository line {} must have the form '<name> <index url>'",
+                    "Repository line {} must have the form '<name> <index URL>'!",
                     n + 1
                 ));
             }

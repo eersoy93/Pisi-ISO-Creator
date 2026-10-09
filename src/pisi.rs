@@ -183,11 +183,11 @@ pub fn load_index(source: &str) -> Result<RepoIndex, String> {
         download(source)?
     } else {
         let path = source.strip_prefix("file://").unwrap_or(source);
-        let file = std::fs::File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let file = std::fs::File::open(path).map_err(|e| format!("Can not open {path}: {e}"))?;
         let mut data = Vec::new();
         file.take(MAX_INDEX_SIZE)
             .read_to_end(&mut data)
-            .map_err(|e| format!("cannot read {path}: {e}"))?;
+            .map_err(|e| format!("Can not read {path}: {e}"))?;
         data
     };
     parse_index(&decompress(raw)?)

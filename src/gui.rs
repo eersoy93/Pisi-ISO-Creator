@@ -170,7 +170,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let ui = weak.unwrap();
         let source = ui.get_index_source().trim().to_string();
         if source.is_empty() {
-            ui.set_index_status("Enter a pisi-index.xml(.xz) URL or path.".into());
+            ui.set_index_status("Enter a pisi-index.xml(.xz) URL or path!".into());
             return;
         }
         ui.set_index_loading(true);
@@ -250,7 +250,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         };
         let mut list = parse_list(&current);
         if list.contains(&name) {
-            ui.set_status_text(format!("'{name}' is already in the list.").into());
+            ui.set_status_text(format!("'{name}' is already in the list!").into());
             return;
         }
         list.push(name.clone());

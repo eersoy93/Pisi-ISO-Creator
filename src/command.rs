@@ -273,7 +273,7 @@ impl Executor {
             let mut ctx = Context::default();
             for step in &plan.cleanup {
                 if let Err(e) = self.perform(&step.action, &mut ctx) {
-                    self.log(format!("warning: cleanup step failed: {e}"));
+                    self.log(format!("Warning: Cleanup step failed: {e}"));
                 }
             }
         }
@@ -295,19 +295,19 @@ impl Executor {
             let missing = missing_tools(&plan.required_tools);
             if !missing.is_empty() {
                 return Err(format!(
-                    "required tools not found in PATH: {}",
+                    "Required tools not found in PATH: {}!",
                     missing.join(", ")
                 ));
             }
             if !is_root() {
-                return Err("building and editing ISO images requires root privileges".into());
+                return Err("Building and editing ISO images requires root privileges!".into());
             }
         }
         let mut ctx = Context::default();
         let total = plan.steps.len();
         for (i, step) in plan.steps.iter().enumerate() {
             if self.cancel.load(Ordering::SeqCst) {
-                return Err("cancelled by user".into());
+                return Err("Cancelled by user!".into());
             }
             (self.sink)(Event::Progress {
                 step: i,
@@ -338,33 +338,33 @@ impl Executor {
                 self.log(format!("$ {cmd}"));
                 match self.run_command(cmd) {
                     Err(e) if cmd.allow_failure => {
-                        self.log(format!("warning: {e} (ignored)"));
+                        self.log(format!("Warning: {e} (ignored)"));
                         Ok(())
                     }
                     other => other,
                 }
             }
             Action::CreateDir(p) => {
-                fs::create_dir_all(p).map_err(|e| format!("cannot create {}: {e}", p.display()))
+                fs::create_dir_all(p).map_err(|e| format!("Can not create {}: {e}", p.display()))
             }
             Action::CreateMountPoint { root, path } => create_mount_point(root, path),
             Action::RemoveDir(p) => remove_dir(p),
             Action::WriteFile { path, contents } => {
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent)
-                        .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+                        .map_err(|e| format!("Can not create {}: {e}", parent.display()))?;
                 }
                 fs::write(path, contents)
-                    .map_err(|e| format!("cannot write {}: {e}", path.display()))
+                    .map_err(|e| format!("Can not write {}: {e}", path.display()))
             }
             Action::WaitForFile { path, timeout_secs } => {
                 let start = Instant::now();
                 while !path.exists() {
                     if start.elapsed() > Duration::from_secs(*timeout_secs) {
-                        return Err(format!("timed out waiting for {}", path.display()));
+                        return Err(format!("Timed out waiting for {}!", path.display()));
                     }
                     if self.cancel.load(Ordering::SeqCst) {
-                        return Err("cancelled by user".into());
+                        return Err("Cancelled by user!".into());
                     }
                     thread::sleep(Duration::from_millis(200));
                 }
@@ -385,21 +385,21 @@ impl Executor {
             } => {
                 let (kernel, initramfs) = find_boot_files(rootfs, initrd.as_deref())?;
                 fs::create_dir_all(dest)
-                    .map_err(|e| format!("cannot create {}: {e}", dest.display()))?;
+                    .map_err(|e| format!("Can not create {}: {e}", dest.display()))?;
                 for (src, name) in [(kernel, "kernel"), (initramfs, "initrd")] {
                     self.log(format!(
-                        "copy {} -> {}/{name}",
+                        "Copy {} -> {}/{name}",
                         src.display(),
                         dest.display()
                     ));
                     fs::copy(&src, dest.join(name))
-                        .map_err(|e| format!("cannot copy {}: {e}", src.display()))?;
+                        .map_err(|e| format!("Can not copy {}: {e}", src.display()))?;
                 }
                 Ok(())
             }
             Action::UnpackSquashfs { iso_dir, rootfs } => {
                 let image = find_squashfs(iso_dir)?;
-                self.log(format!("found root file system image {}", image.display()));
+                self.log(format!("Found root file system image {}", image.display()));
                 ctx.squashfs_image = Some(image.clone());
                 let cmd = Cmd::new("unsquashfs")
                     .arg("-f")
@@ -416,7 +416,7 @@ impl Executor {
                 let image = ctx
                     .squashfs_image
                     .clone()
-                    .ok_or("no SquashFS image was unpacked")?;
+                    .ok_or("No SquashFS image was unpacked!")?;
                 let cmd = mksquashfs(rootfs, &image, compression);
                 self.log(format!("$ {cmd}"));
                 self.run_command(&cmd)
@@ -433,7 +433,7 @@ impl Executor {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("cannot start {}: {e}", cmd.program.to_string_lossy()))?;
+            .map_err(|e| format!("Can not start {}: {e}", cmd.program.to_string_lossy()))?;
 
         let readers: Vec<_> = [
             child
@@ -473,7 +473,7 @@ impl Executor {
                 for r in readers {
                     let _ = r.join();
                 }
-                return Err("cancelled by user".into());
+                return Err("Cancelled by user!".into());
             }
             thread::sleep(Duration::from_millis(100));
         };
@@ -484,7 +484,7 @@ impl Executor {
             Ok(())
         } else {
             Err(format!(
-                "{} exited with {status}",
+                "{} exited with {status}!",
                 cmd.program.to_string_lossy()
             ))
         }
@@ -508,23 +508,23 @@ pub fn mksquashfs(rootfs: &Path, image: &Path, compression: &str) -> Cmd {
 fn create_mount_point(root: &Path, path: &Path) -> Result<(), String> {
     let relative = path
         .strip_prefix(root)
-        .map_err(|_| format!("{} is not below {}", path.display(), root.display()))?;
+        .map_err(|_| format!("{} is not below {}!", path.display(), root.display()))?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component);
         match fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
                 return Err(format!(
-                    "refusing to mount on {}: it is a symbolic link",
+                    "Refusing to mount on {} because it is a symbolic link!",
                     current.display()
                 ));
             }
             Ok(meta) if !meta.is_dir() => {
-                return Err(format!("{} is not a directory", current.display()));
+                return Err(format!("{} is not a directory!", current.display()));
             }
             Ok(_) => {}
             Err(_) => fs::create_dir(&current)
-                .map_err(|e| format!("cannot create {}: {e}", current.display()))?,
+                .map_err(|e| format!("Can not create {}: {e}", current.display()))?,
         }
     }
     Ok(())
@@ -537,19 +537,19 @@ fn remove_dir(path: &Path) -> Result<(), String> {
     }
     let canonical = fs::canonicalize(path).map_err(|e| e.to_string())?;
     if canonical == Path::new("/") {
-        return Err("refusing to remove /".into());
+        return Err("Refusing to remove /!".into());
     }
     if let Some(m) = mount_points()
         .into_iter()
         .find(|m| m.starts_with(&canonical))
     {
         return Err(format!(
-            "refusing to remove {}: {} is still mounted",
+            "Refusing to remove {}: {} is still mounted!",
             path.display(),
             m.display()
         ));
     }
-    fs::remove_dir_all(path).map_err(|e| format!("cannot remove {}: {e}", path.display()))
+    fs::remove_dir_all(path).map_err(|e| format!("Can not remove {}: {e}", path.display()))
 }
 
 /// Mount points from `/proc/self/mountinfo`.
@@ -654,7 +654,7 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 pub fn find_boot_files(rootfs: &Path, initrd: Option<&Path>) -> Result<(PathBuf, PathBuf), String> {
     let boot = rootfs.join("boot");
     let names: Vec<String> = fs::read_dir(&boot)
-        .map_err(|e| format!("cannot read {}: {e}", boot.display()))?
+        .map_err(|e| format!("Can not read {}: {e}", boot.display()))?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file())
         .filter_map(|e| e.file_name().into_string().ok())
@@ -663,7 +663,7 @@ pub fn find_boot_files(rootfs: &Path, initrd: Option<&Path>) -> Result<(PathBuf,
         .iter()
         .filter(|n| n.starts_with("kernel-") || n.starts_with("vmlinuz-"))
         .max_by(|a, b| natural_cmp(a, b))
-        .ok_or_else(|| format!("no kernel found in {}", boot.display()))?;
+        .ok_or_else(|| format!("No kernel found in {}!", boot.display()))?;
     let version = kernel.split_once('-').map(|x| x.1).unwrap_or_default();
 
     let initramfs = match initrd {
@@ -680,12 +680,12 @@ pub fn find_boot_files(rootfs: &Path, initrd: Option<&Path>) -> Result<(PathBuf,
             let name = candidates
                 .iter()
                 .find(|c| names.contains(c))
-                .ok_or_else(|| format!("no initramfs for kernel {kernel} found"))?;
+                .ok_or_else(|| format!("No initramfs for kernel {kernel} found!"))?;
             boot.join(name)
         }
     };
     if !initramfs.is_file() {
-        return Err(format!("initramfs {} not found", initramfs.display()));
+        return Err(format!("Initramfs {} not found!", initramfs.display()));
     }
     Ok((boot.join(kernel), initramfs))
 }
@@ -699,7 +699,7 @@ pub fn find_squashfs(dir: &Path) -> Result<PathBuf, String> {
     let mut best: Option<(u64, PathBuf)> = None;
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let entries = fs::read_dir(&d).map_err(|e| format!("cannot read {}: {e}", d.display()))?;
+        let entries = fs::read_dir(&d).map_err(|e| format!("Can not read {}: {e}", d.display()))?;
         for entry in entries.flatten() {
             let Ok(ft) = entry.file_type() else { continue };
             let path = entry.path();
@@ -721,7 +721,7 @@ pub fn find_squashfs(dir: &Path) -> Result<PathBuf, String> {
         }
     }
     best.map(|(_, p)| p)
-        .ok_or_else(|| format!("no SquashFS root file system found in {}", dir.display()))
+        .ok_or_else(|| format!("No SquashFS root file system found in {}!", dir.display()))
 }
 
 #[cfg(test)]
