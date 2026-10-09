@@ -295,7 +295,7 @@ impl Executor {
             let missing = missing_tools(&plan.required_tools);
             if !missing.is_empty() {
                 return Err(format!(
-                    "Required tools not found in PATH: {}!",
+                    "Required tools not found in PATH: {} !",
                     missing.join(", ")
                 ));
             }
@@ -361,7 +361,7 @@ impl Executor {
                 let start = Instant::now();
                 while !path.exists() {
                     if start.elapsed() > Duration::from_secs(*timeout_secs) {
-                        return Err(format!("Timed out waiting for {}!", path.display()));
+                        return Err(format!("Timed out waiting for {} !", path.display()));
                     }
                     if self.cancel.load(Ordering::SeqCst) {
                         return Err("Cancelled by user!".into());
@@ -484,7 +484,7 @@ impl Executor {
             Ok(())
         } else {
             Err(format!(
-                "{} exited with {status}!",
+                "{} exited with {status} !",
                 cmd.program.to_string_lossy()
             ))
         }
@@ -508,7 +508,7 @@ pub fn mksquashfs(rootfs: &Path, image: &Path, compression: &str) -> Cmd {
 fn create_mount_point(root: &Path, path: &Path) -> Result<(), String> {
     let relative = path
         .strip_prefix(root)
-        .map_err(|_| format!("{} is not below {}!", path.display(), root.display()))?;
+        .map_err(|_| format!("{} is not below {} !", path.display(), root.display()))?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component);
@@ -663,7 +663,7 @@ pub fn find_boot_files(rootfs: &Path, initrd: Option<&Path>) -> Result<(PathBuf,
         .iter()
         .filter(|n| n.starts_with("kernel-") || n.starts_with("vmlinuz-"))
         .max_by(|a, b| natural_cmp(a, b))
-        .ok_or_else(|| format!("No kernel found in {}!", boot.display()))?;
+        .ok_or_else(|| format!("No kernel found in {} !", boot.display()))?;
     let version = kernel.split_once('-').map(|x| x.1).unwrap_or_default();
 
     let initramfs = match initrd {
@@ -721,7 +721,7 @@ pub fn find_squashfs(dir: &Path) -> Result<PathBuf, String> {
         }
     }
     best.map(|(_, p)| p)
-        .ok_or_else(|| format!("No SquashFS root file system found in {}!", dir.display()))
+        .ok_or_else(|| format!("No SquashFS root file system found in {} !", dir.display()))
 }
 
 #[cfg(test)]
