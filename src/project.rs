@@ -91,13 +91,13 @@ impl Default for Project {
 impl Project {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text =
-            fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        toml::from_str(&text).map_err(|e| format!("invalid project file {}: {e}", path.display()))
+            fs::read_to_string(path).map_err(|e| format!("Can not read {}: {e}", path.display()))?;
+        toml::from_str(&text).map_err(|e| format!("Invalid project file {}: {e}", path.display()))
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let text = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+        fs::write(path, text).map_err(|e| format!("Can not write {}: {e}", path.display()))
     }
 
     /// Returns a list of human readable problems. An empty list means the
@@ -105,10 +105,10 @@ impl Project {
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
         if self.name.trim().is_empty() {
-            errors.push("Distribution name must not be empty.".into());
+            errors.push("Distribution name must not be empty!".into());
         }
         if has_control_chars(&self.name) || has_control_chars(&self.version) {
-            errors.push("Name and version must not contain control characters.".into());
+            errors.push("Name and version must not contain control characters!".into());
         }
         check_volume_label(&self.volume_label, &mut errors);
         if !self.hostname.is_empty() && !is_valid_hostname(&self.hostname) {
@@ -118,11 +118,11 @@ impl Project {
             errors.push(format!("Invalid live user name '{}'.", self.live_user));
         }
         if self.repositories.is_empty() {
-            errors.push("At least one PiSi repository is required.".into());
+            errors.push("At least one PiSi repository is required!".into());
         }
         check_repositories(&self.repositories, &mut errors);
         if self.components.is_empty() && self.packages.is_empty() {
-            errors.push("Select at least one PiSi component or package.".into());
+            errors.push("Select at least one PiSi component or package!".into());
         }
         check_names("component", &self.components, &mut errors);
         check_names("package", &self.packages, &mut errors);
@@ -130,7 +130,7 @@ impl Project {
         check_paths(&self.work_dir, &self.output_iso, &mut errors);
         check_compression(&self.squashfs_compression, &mut errors);
         if has_control_chars(&self.kernel_cmdline) {
-            errors.push("Kernel command line must be a single line.".into());
+            errors.push("Kernel command line must be a single line!".into());
         }
         errors
     }
@@ -187,7 +187,7 @@ impl EditJob {
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
         if self.input_iso.as_os_str().is_empty() {
-            errors.push("Select the ISO image to edit.".into());
+            errors.push("Select the ISO image to edit!".into());
         }
         if !self.volume_label.is_empty() {
             check_volume_label(&self.volume_label, &mut errors);
@@ -197,7 +197,7 @@ impl EditJob {
         check_names("package", &self.remove_packages, &mut errors);
         check_paths(&self.work_dir, &self.output_iso, &mut errors);
         if !self.input_iso.as_os_str().is_empty() && self.input_iso == self.output_iso {
-            errors.push("Output ISO must be different from the input ISO.".into());
+            errors.push("Output ISO must be different from the input ISO!".into());
         }
         check_compression(&self.squashfs_compression, &mut errors);
         errors
@@ -210,23 +210,23 @@ fn has_control_chars(s: &str) -> bool {
 
 fn check_volume_label(label: &str, errors: &mut Vec<String>) {
     if label.is_empty() || label.len() > 32 {
-        errors.push("Volume label must be 1 to 32 characters long.".into());
+        errors.push("Volume label must be 1 to 32 characters long!".into());
     }
     if !label
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        errors.push("Volume label may only contain A-Z, a-z, 0-9, '_' and '-'.".into());
+        errors.push("Volume label may only contain A-Z, a-z, 0-9, '_' and '-'!".into());
     }
 }
 
 fn check_repositories(repos: &[Repository], errors: &mut Vec<String>) {
     for repo in repos {
         if !is_valid_name(&repo.name) {
-            errors.push(format!("Invalid repository name '{}'.", repo.name));
+            errors.push(format!("Invalid repository name '{}'!", repo.name));
         }
         if !is_valid_url(&repo.url) {
-            errors.push(format!("Invalid repository URL '{}'.", repo.url));
+            errors.push(format!("Invalid repository URL '{}'!", repo.url));
         }
     }
 }
@@ -234,19 +234,19 @@ fn check_repositories(repos: &[Repository], errors: &mut Vec<String>) {
 fn check_names(kind: &str, names: &[String], errors: &mut Vec<String>) {
     for name in names {
         if !is_valid_name(name) {
-            errors.push(format!("Invalid {kind} name '{name}'."));
+            errors.push(format!("Invalid {kind} name '{name}'!"));
         }
     }
 }
 
 fn check_paths(work_dir: &Path, output_iso: &Path, errors: &mut Vec<String>) {
     if work_dir.as_os_str().is_empty() {
-        errors.push("Work directory must not be empty.".into());
+        errors.push("Work directory must not be empty!".into());
     } else if work_dir == Path::new("/") {
-        errors.push("Work directory must not be the root directory.".into());
+        errors.push("Work directory must not be the root directory!".into());
     }
     if output_iso.as_os_str().is_empty() {
-        errors.push("Output ISO path must not be empty.".into());
+        errors.push("Output ISO path must not be empty!".into());
     }
 }
 
@@ -325,7 +325,7 @@ pub fn parse_repositories(text: &str) -> Result<Vec<Repository>, String> {
             (Some(name), Some(url), None) => repos.push(Repository::new(name, url)),
             _ => {
                 return Err(format!(
-                    "repository line {} must have the form '<name> <index url>'",
+                    "Repository line {} must have the form '<name> <index url>'",
                     n + 1
                 ));
             }
