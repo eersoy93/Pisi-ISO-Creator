@@ -273,7 +273,7 @@ impl Executor {
             let mut ctx = Context::default();
             for step in &plan.cleanup {
                 if let Err(e) = self.perform(&step.action, &mut ctx) {
-                    self.log(format!("Warning: Cleanup step failed: {e}"));
+                    self.log(format!("Warning: Cleanup step failed: {e} !"));
                 }
             }
         }
@@ -338,7 +338,7 @@ impl Executor {
                 self.log(format!("$ {cmd}"));
                 match self.run_command(cmd) {
                     Err(e) if cmd.allow_failure => {
-                        self.log(format!("Warning: Ignoring failure: {e}"));
+                        self.log(format!("Warning: Ignoring failure: {e} !"));
                         Ok(())
                     }
                     other => other,
@@ -399,7 +399,7 @@ impl Executor {
             }
             Action::UnpackSquashfs { iso_dir, rootfs } => {
                 let image = find_squashfs(iso_dir)?;
-                self.log(format!("Found root file system image {}", image.display()));
+                self.log(format!("Found root file system image {} !", image.display()));
                 ctx.squashfs_image = Some(image.clone());
                 let cmd = Cmd::new("unsquashfs")
                     .arg("-f")
