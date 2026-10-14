@@ -65,7 +65,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         match Project::load(&path) {
             Ok(p) => {
                 project_to_ui(&ui, &p);
-                ui.set_status_text(format!("Opened {}.", path.display()).into());
+                ui.set_status_text(format!("Opened {}", path.display()).into());
             }
             Err(e) => ui.set_status_text(format!("Error: {e}").into()),
         }
@@ -77,7 +77,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let path = PathBuf::from(ui.get_project_path().as_str());
         let result = ui_to_project(&ui).and_then(|p| p.save(&path));
         ui.set_status_text(match result {
-            Ok(()) => format!("Saved {}.", path.display()).into(),
+            Ok(()) => format!("Saved {}", path.display()).into(),
             Err(e) => format!("Error: {e}").into(),
         });
     });
@@ -119,7 +119,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         match EditJob::load(&path) {
             Ok(job) => {
                 edit_job_to_ui(&ui, &job);
-                ui.set_status_text(format!("Opened {}.", path.display()).into());
+                ui.set_status_text(format!("Opened {}", path.display()).into());
             }
             Err(e) => ui.set_status_text(format!("Error: {e}").into()),
         }
@@ -131,7 +131,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let path = PathBuf::from(ui.get_edit_job_path().as_str());
         let result = ui_to_edit_job(&ui).and_then(|j| j.save(&path));
         ui.set_status_text(match result {
-            Ok(()) => format!("Saved {}.", path.display()).into(),
+            Ok(()) => format!("Saved {}", path.display()).into(),
             Err(e) => format!("Error: {e}").into(),
         });
     });
