@@ -469,7 +469,7 @@ pub fn grub_config(project: &Project) -> String {
         format!("{title} (Live, safe graphics)"),
         " nomodeset",
     ));
-    cfg.push_str("menuentry 'Reboot' {\n    reboot\n}\n\nmenuentry 'Power off' {\n    halt\n}\n");
+    cfg.push_str("menuentry 'Reboot' {\n    reboot\n}\n\nmenuentry 'Power Off' {\n    halt\n}\n");
     cfg
 }
 
