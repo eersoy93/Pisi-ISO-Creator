@@ -298,10 +298,8 @@ impl Executor {
                 missing.join(", ")
             ));
         }
-        if !self.dry_run {
-            if !is_root() {
-                return Err("Building and editing ISO images requires root privileges!".into());
-            }
+        if !self.dry_run && !is_root() {
+            return Err("Building and editing ISO images requires root privileges!".into());
         }
         let mut ctx = Context::default();
         let total = plan.steps.len();
