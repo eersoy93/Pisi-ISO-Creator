@@ -183,11 +183,11 @@ pub fn load_index(source: &str) -> Result<RepoIndex, String> {
         download(source)?
     } else {
         let path = source.strip_prefix("file://").unwrap_or(source);
-        let file = std::fs::File::open(path).map_err(|e| format!("Can not open {path}: {e} !"))?;
+        let file = std::fs::File::open(path).map_err(|e| format!("Can not open {path}: {e}"))?;
         let mut data = Vec::new();
         file.take(MAX_INDEX_SIZE)
             .read_to_end(&mut data)
-            .map_err(|e| format!("Can not read {path}: {e} !"))?;
+            .map_err(|e| format!("Can not read {path}: {e}"))?;
         data
     };
     parse_index(&decompress(raw)?)
@@ -312,7 +312,7 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
             Event::GeneralRef(r) => {
                 if let Some(c) = r
                     .resolve_char_ref()
-                    .map_err(|e| format!("Invalid character reference in index: {e} !"))?
+                    .map_err(|e| format!("Invalid character reference in index: {e}"))?
                 {
                     text.push(c);
                 } else {

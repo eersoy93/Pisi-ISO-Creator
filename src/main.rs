@@ -39,7 +39,7 @@ fn main() -> ExitCode {
         return match gui::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("Error: Can not start the user interface: {e} !");
+                eprintln!("Error: Can not start the user interface: {e}");
                 ExitCode::FAILURE
             }
         };

@@ -103,7 +103,7 @@ impl Project {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let text = toml::to_string_pretty(self)
-            .map_err(|e| format!("Can not serialize the project: {e} !"))?;
+            .map_err(|e| format!("Can not serialize the project: {e}"))?;
         fs::write(path, text).map_err(|e| format!("Can not write {}: {e} !", path.display()))
     }
 
@@ -194,14 +194,14 @@ impl EditJob {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let text = toml::to_string_pretty(self)
-            .map_err(|e| format!("Can not serialize the edit job: {e} !"))?;
+            .map_err(|e| format!("Can not serialize the edit job: {e}"))?;
         fs::write(path, text).map_err(|e| format!("Can not write {}: {e} !", path.display()))
     }
 
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
         if self.input_iso.as_os_str().is_empty() {
-            errors.push("Select the ISO image to edit!".into());
+            errors.push("Select the ISO image to edit.".into());
         }
         if !self.volume_label.is_empty() {
             check_volume_label(&self.volume_label, &mut errors);
