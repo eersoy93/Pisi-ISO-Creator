@@ -291,14 +291,14 @@ impl Executor {
             plan.title,
             if self.dry_run { " (dry run)" } else { "" }
         ));
+        let missing = missing_tools(&plan.required_tools);
+        if !missing.is_empty() {
+            return Err(format!(
+                "Required tools not found in PATH: {} !",
+                missing.join(", ")
+            ));
+        }
         if !self.dry_run {
-            let missing = missing_tools(&plan.required_tools);
-            if !missing.is_empty() {
-                return Err(format!(
-                    "Required tools not found in PATH: {} !",
-                    missing.join(", ")
-                ));
-            }
             if !is_root() {
                 return Err("Building and editing ISO images requires root privileges!".into());
             }
@@ -817,7 +817,7 @@ mod tests {
         let target = dir.path().join("created");
         let plan = Plan {
             title: "Test".into(),
-            required_tools: vec!["definitely-not-installed-tool"],
+            required_tools: vec!["sh"],
             steps: vec![Step::new("mkdir", Action::CreateDir(target.clone()))],
             cleanup: vec![],
         };
@@ -831,6 +831,22 @@ mod tests {
                 .any(|e| matches!(e, Event::Log(l) if l.contains("mkdir -p")))
         );
         assert_eq!(events.last(), Some(&Event::Finished(Ok(()))));
+    }
+
+    #[test]
+    fn dry_run_fails_on_missing_tools() {
+        let plan = Plan {
+            title: "Test".into(),
+            required_tools: vec!["definitely-not-installed-tool"],
+            steps: vec![],
+            cleanup: vec![],
+        };
+        let (exec, events) = collecting_executor(true);
+        assert!(exec.execute(&plan).is_err());
+        assert!(matches!(
+            events.lock().unwrap().last(),
+            Some(Event::Finished(Err(_)))
+        ));
     }
 
     #[test]
