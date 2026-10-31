@@ -89,7 +89,7 @@ post_install_script = ""            # executed with /bin/sh -e in the chroot
 
 [[repositories]]
 name = "pisi-2.0"
-url = "https://ciftlik.pisilinux.org/pisi-2.0/pisi-index.xml.xz"
+url = "https://stable2.pisilinux.org/pisi-index.xml.xz"
 ```
 
 Adjust the repository URL to the binary repository you want to build from.

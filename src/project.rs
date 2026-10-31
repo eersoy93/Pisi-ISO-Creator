@@ -73,7 +73,7 @@ impl Default for Project {
             live_user: "pisi".into(),
             repositories: vec![Repository::new(
                 "pisi-2.0",
-                "https://ciftlik.pisilinux.org/pisi-2.0/pisi-index.xml.xz",
+                "https://stable2.pisilinux.org/pisi-index.xml.xz",
             )],
             components: vec!["system.base".into()],
             packages: vec!["kernel".into(), "mkinitcpio".into(), "grub2".into()],
