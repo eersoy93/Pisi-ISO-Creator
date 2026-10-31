@@ -142,7 +142,7 @@ pub fn build_plan(project: &Project) -> Plan {
     }
     steps.push(Step::run(
         "Create bootable hybrid ISO image (BIOS + UEFI)",
-        Cmd::new("grub-mkrescue")
+        Cmd::new("grub2-mkrescue")
             .arg("-o")
             .arg(&project.output_iso)
             .arg(&iso)
@@ -159,7 +159,7 @@ pub fn build_plan(project: &Project) -> Plan {
             "mount",
             "umount",
             "mksquashfs",
-            "grub-mkrescue",
+            "grub2-mkrescue",
             "xorriso",
             "mformat",
         ],
@@ -514,7 +514,7 @@ mod tests {
             "mkinitcpio -k",
             "delete-cache",
             "mksquashfs /w/rootfs /w/iso/live/pisi.sfs -noappend -comp xz",
-            "grub-mkrescue -o /out/live.iso /w/iso -- -volid PISI_LIVE",
+            "grub2-mkrescue -o /out/live.iso /w/iso -- -volid PISI_LIVE",
         ];
         for pair in order.windows(2) {
             assert!(

@@ -15,7 +15,7 @@ feature is also available from the command line.
   4. generates a live initramfs with `mkinitcpio` and the `live` hook shipped
      by Pisi's mkinitcpio package (`boot=live`),
   5. compresses the root file system to `live/pisi.sfs` with SquashFS,
-  6. writes a GRUB menu and creates the ISO with `grub-mkrescue`.
+  6. writes a GRUB menu and creates the ISO with `grub2-mkrescue`.
 - **ISO editor** – modifies an existing (Pisi based) live ISO: extracts it,
   unpacks the root SquashFS (found automatically), adds repositories,
   upgrades / installs / removes PiSi packages, runs a post-install script,
@@ -43,7 +43,7 @@ Creating and editing images requires **root** and these host tools:
 
 | Task        | Tools                                                                 |
 |-------------|-----------------------------------------------------------------------|
-| Create ISO  | `pisi`, `chroot`, `mount`, `mksquashfs`, `grub-mkrescue`, `xorriso`, `mformat` (mtools) |
+| Create ISO  | `pisi`, `chroot`, `mount`, `mksquashfs`, `grub2-mkrescue`, `xorriso`, `mformat` (mtools) |
 | Edit ISO    | `xorriso`, `unsquashfs`, `mksquashfs`; `pisi`, `chroot`, `mount` when packages are changed |
 
 The host is best a Pisi GNU/Linux system, so that the host `pisi` matches the
