@@ -57,6 +57,17 @@ pub fn build_plan(project: &Project) -> Plan {
         ));
     }
 
+    // COMAR scripts were skipped, so /etc/passwd etc. needed by dbus-daemon are missing.
+    steps.push(Step::run(
+        "Copy baselayout defaults to /etc",
+        chroot(&rootfs, "/bin/sh")
+            .arg("-c")
+            .arg("cp -Rpn /usr/share/baselayout/. /etc/"),
+    ));
+    steps.push(Step::run(
+        "Update shared library cache",
+        chroot(&rootfs, "/sbin/ldconfig"),
+    ));
     steps.extend(enter_chroot_steps(&rootfs, true));
     steps.push(Step::run(
         "Configure baselayout",
@@ -354,7 +365,6 @@ fn enter_chroot_steps(rootfs: &Path, with_dbus: bool) -> Vec<Step> {
     steps.push(Step::run(
         "Start D-Bus (required by COMAR)",
         chroot(rootfs, "/sbin/start-stop-daemon").args([
-            "-b",
             "--start",
             "--pidfile",
             "/run/dbus/pid",
@@ -504,6 +514,8 @@ mod tests {
         };
         let order = [
             "add-repo pisi",
+            "cp -Rpn /usr/share/baselayout/. /etc/",
+            "/sbin/ldconfig",
             "mount -t proc proc /w/rootfs/proc",
             "configure-pending baselayout",
             "useradd -m",
