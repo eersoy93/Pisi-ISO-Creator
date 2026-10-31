@@ -4,6 +4,7 @@
 use crate::command::Cmd;
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use std::collections::{BTreeSet, HashMap};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -43,15 +44,15 @@ impl Pisi {
             .args(packages)
     }
 
-    pub fn install_components(&self, components: &[String]) -> Cmd {
-        let mut cmd = self
-            .base("install")
+    /// Installs a package set that already contains all dependencies (see
+    /// [`resolve_install`]). PiSi's own planner installs system.base packages
+    /// first, which fails for their dependencies from other components.
+    pub fn install_resolved(&self, packages: &[String]) -> Cmd {
+        self.base("install")
             .arg("--ignore-comar")
-            .arg("--ignore-file-conflicts");
-        for component in components {
-            cmd = cmd.arg("--component").arg(component);
-        }
-        cmd
+            .arg("--ignore-file-conflicts")
+            .arg("--ignore-dependency")
+            .args(packages)
     }
 
     pub fn remove(&self, packages: &[String]) -> Cmd {
@@ -171,6 +172,54 @@ impl RepoIndex {
     }
 }
 
+/// Packages of `components` (including sub-components) and `packages`,
+/// together with all of their runtime dependencies, sorted by name.
+/// Earlier indexes take precedence.
+pub fn resolve_install(
+    indexes: &[RepoIndex],
+    components: &[String],
+    packages: &[String],
+) -> Result<Vec<String>, String> {
+    let mut by_name: HashMap<&str, &PackageInfo> = HashMap::new();
+    for p in indexes.iter().flat_map(|i| &i.packages) {
+        by_name.entry(p.name.as_str()).or_insert(p);
+    }
+    let mut queue: Vec<&str> = packages.iter().map(String::as_str).collect();
+    for component in components {
+        let prefix = format!("{component}.");
+        let before = queue.len();
+        queue.extend(
+            by_name
+                .values()
+                .filter(|p| p.component == *component || p.component.starts_with(&prefix))
+                .map(|p| p.name.as_str()),
+        );
+        if queue.len() == before {
+            return Err(format!("Component {component} not found in the repositories!"));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    let mut missing = BTreeSet::new();
+    while let Some(name) = queue.pop() {
+        if !seen.insert(name) {
+            continue;
+        }
+        match by_name.get(name) {
+            Some(p) => queue.extend(p.dependencies.iter().map(String::as_str)),
+            None => {
+                missing.insert(name);
+            }
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "Packages not found in the repositories: {} !",
+            missing.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(seen.into_iter().map(str::to_owned).collect())
+}
+
 /// Maximum size accepted for a (decompressed) index, protects against
 /// decompression bombs.
 const MAX_INDEX_SIZE: u64 = 512 * 1024 * 1024;
@@ -266,6 +315,8 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
     let mut in_first_update = false;
     let mut seen_update = false;
     let mut lang_en = true;
+    // Only the first alternative of an <AnyDependency> is used.
+    let mut any_dep_taken = false;
     let mut text = String::new();
 
     loop {
@@ -288,6 +339,9 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
                 if name == "Update" {
                     in_first_update = !seen_update;
                     seen_update = true;
+                }
+                if name == "AnyDependency" {
+                    any_dep_taken = false;
                 }
                 if name == "Package" && is_package_path(&path) {
                     pkg = PackageInfo::default();
@@ -341,6 +395,24 @@ pub fn parse_index(xml: &[u8]) -> Result<RepoIndex, String> {
                         pkg.installed_size = value.parse().unwrap_or(0)
                     }
                     ["PISI", "Package", "RuntimeDependencies", "Dependency"] => {
+                        pkg.dependencies.push(value)
+                    }
+                    [
+                        "PISI",
+                        "Package",
+                        "RuntimeDependencies",
+                        "AnyDependency",
+                        "Dependency",
+                    ]
+                    | [
+                        "PISI",
+                        "SpecFile",
+                        "Package",
+                        "RuntimeDependencies",
+                        "AnyDependency",
+                        "Dependency",
+                    ] if !any_dep_taken => {
+                        any_dep_taken = true;
                         pkg.dependencies.push(value)
                     }
                     ["PISI", "Package", "History", "Update", "Version"] if in_first_update => {
@@ -543,6 +615,48 @@ mod tests {
     }
 
     #[test]
+    fn parses_first_any_dependency_alternative() {
+        let xml = r#"<PISI><Package><Name>vbox</Name><RuntimeDependencies>
+            <Dependency>qt</Dependency>
+            <AnyDependency><Dependency>module-a</Dependency><Dependency>module-b</Dependency></AnyDependency>
+        </RuntimeDependencies></Package></PISI>"#;
+        let index = parse_index(xml.as_bytes()).unwrap();
+        assert_eq!(index.packages[0].dependencies, vec!["qt", "module-a"]);
+    }
+
+    #[test]
+    fn resolves_component_closure_across_components() {
+        let pkg = |name: &str, component: &str, deps: &[&str]| PackageInfo {
+            name: name.into(),
+            component: component.into(),
+            dependencies: deps.iter().map(|d| d.to_string()).collect(),
+            ..Default::default()
+        };
+        let index = RepoIndex {
+            packages: vec![
+                pkg("libutil-linux", "system.base", &["python3"]),
+                pkg("python3", "programming.language", &["zlib"]),
+                pkg("zlib", "system.base.libs", &[]),
+                pkg("kernel", "kernel", &["zlib"]),
+                pkg("vim", "editor", &[]),
+            ],
+            components: vec![],
+        };
+        let names = resolve_install(
+            std::slice::from_ref(&index),
+            &["system.base".into()],
+            &["kernel".into()],
+        )
+        .unwrap();
+        assert_eq!(names, vec!["kernel", "libutil-linux", "python3", "zlib"]);
+
+        let err = resolve_install(&[index.clone()], &["desktop".into()], &[]).unwrap_err();
+        assert!(err.contains("desktop"));
+        let err = resolve_install(&[index], &[], &["nope".into()]).unwrap_err();
+        assert!(err.contains("nope"));
+    }
+
+    #[test]
     fn builds_pisi_commands() {
         let pisi = Pisi::new("/work/rootfs");
         assert_eq!(
@@ -551,8 +665,8 @@ mod tests {
             "pisi --yes-all --destdir=/work/rootfs add-repo main https://x/pisi-index.xml.xz"
         );
         assert_eq!(
-            pisi.install_components(&["system.base".into()]).to_string(),
-            "pisi --yes-all --destdir=/work/rootfs install --ignore-comar --ignore-file-conflicts --component system.base"
+            pisi.install_resolved(&["python3".into(), "zlib".into()]).to_string(),
+            "pisi --yes-all --destdir=/work/rootfs install --ignore-comar --ignore-file-conflicts --ignore-dependency python3 zlib"
         );
         assert_eq!(
             pisi.configure_pending_in_chroot(Some("baselayout"))

@@ -1,6 +1,7 @@
 //! External commands and the step executor used by the ISO creator and
 //! editor pipelines.
 
+use crate::pisi::{Pisi, load_index, resolve_install};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
@@ -118,6 +119,14 @@ pub enum Action {
         rootfs: PathBuf,
         compression: String,
     },
+    /// Installs components and packages into `root` together with their
+    /// dependencies, resolved from the given repository indexes.
+    PisiInstall {
+        root: PathBuf,
+        index_urls: Vec<String>,
+        components: Vec<String>,
+        packages: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,6 +226,18 @@ fn describe_action(action: &Action) -> String {
         } => format!(
             "mksquashfs {} <original image path> -noappend -comp {compression}",
             quote_path(rootfs)
+        ),
+        Action::PisiInstall {
+            root,
+            index_urls,
+            components,
+            packages,
+        } => format!(
+            "# resolve dependencies of components [{}] and packages [{}] from {}\n{} <resolved packages>",
+            components.join(" "),
+            packages.join(" "),
+            index_urls.join(" "),
+            Pisi::new(root).install_resolved(&[])
         ),
     }
 }
@@ -419,6 +440,23 @@ impl Executor {
                     .clone()
                     .ok_or("No SquashFS image was unpacked!")?;
                 let cmd = mksquashfs(rootfs, &image, compression);
+                self.log(format!("$ {cmd}"));
+                self.run_command(&cmd)
+            }
+            Action::PisiInstall {
+                root,
+                index_urls,
+                components,
+                packages,
+            } => {
+                let mut indexes = Vec::new();
+                for url in index_urls {
+                    self.log(format!("Loading repository index {url}"));
+                    indexes.push(load_index(url)?);
+                }
+                let names = resolve_install(&indexes, components, packages)?;
+                self.log(format!("{} package(s) will be installed", names.len()));
+                let cmd = Pisi::new(root).install_resolved(&names);
                 self.log(format!("$ {cmd}"));
                 self.run_command(&cmd)
             }

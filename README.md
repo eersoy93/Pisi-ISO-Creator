@@ -77,7 +77,7 @@ version = "2.0"
 volume_label = "PISI_LIVE"          # ISO9660 label, max. 32 chars [A-Za-z0-9_-]
 hostname = "pisi"
 live_user = "pisi"                  # empty = no live user
-components = ["system.base"]        # pisi install --component …
+components = ["system.base"]        # with sub-components and all dependencies
 packages = ["kernel", "mkinitcpio", "grub2"]
 excluded_packages = []              # removed again after installation
 work_dir = "/var/tmp/pisi-iso-creator"

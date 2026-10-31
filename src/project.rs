@@ -42,7 +42,7 @@ pub struct Project {
     pub live_user: String,
     /// PiSi repositories used to install the root file system.
     pub repositories: Vec<Repository>,
-    /// PiSi components installed with `pisi install -c`.
+    /// PiSi components (with sub-components) to install.
     pub components: Vec<String>,
     /// PiSi packages installed with `pisi install`.
     pub packages: Vec<String>,

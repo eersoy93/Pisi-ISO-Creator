@@ -36,16 +36,15 @@ pub fn build_plan(project: &Project) -> Plan {
             pisi.add_repo(&repo.name, &repo.url),
         ));
     }
-    if !project.components.is_empty() {
-        steps.push(Step::run(
-            format!("Install components: {}", project.components.join(", ")),
-            pisi.install_components(&project.components),
-        ));
-    }
-    if !project.packages.is_empty() {
-        steps.push(Step::run(
-            format!("Install {} package(s)", project.packages.len()),
-            pisi.install(&project.packages),
+    if !project.components.is_empty() || !project.packages.is_empty() {
+        steps.push(Step::new(
+            "Install packages and their dependencies",
+            Action::PisiInstall {
+                root: rootfs.clone(),
+                index_urls: project.repositories.iter().map(|r| r.url.clone()).collect(),
+                components: project.components.clone(),
+                packages: project.packages.clone(),
+            },
         ));
     }
     if !project.excluded_packages.is_empty() {
@@ -505,8 +504,6 @@ mod tests {
         };
         let order = [
             "add-repo pisi",
-            "install --ignore-comar --ignore-file-conflicts --component system.base",
-            "install --ignore-comar --ignore-file-conflicts kernel",
             "mount -t proc proc /w/rootfs/proc",
             "configure-pending baselayout",
             "useradd -m",
@@ -524,6 +521,11 @@ mod tests {
                 pair[1]
             );
         }
+        assert!(plan.steps.iter().any(|s| matches!(
+            &s.action,
+            Action::PisiInstall { components, packages, .. }
+                if components == &["system.base"] && packages.contains(&"kernel".to_string())
+        )));
         assert!(plan.steps.iter().any(|s| matches!(
             &s.action,
             Action::CopyBootFiles { initrd: Some(p), .. } if p == Path::new(LIVE_INITRD)
