@@ -195,7 +195,9 @@ pub fn resolve_install(
                 .map(|p| p.name.as_str()),
         );
         if queue.len() == before {
-            return Err(format!("Component {component} not found in the repositories!"));
+            return Err(format!(
+                "Component {component} not found in the repositories!"
+            ));
         }
     }
     let mut seen = BTreeSet::new();
@@ -665,7 +667,8 @@ mod tests {
             "pisi --yes-all --destdir=/work/rootfs add-repo main https://x/pisi-index.xml.xz"
         );
         assert_eq!(
-            pisi.install_resolved(&["python3".into(), "zlib".into()]).to_string(),
+            pisi.install_resolved(&["python3".into(), "zlib".into()])
+                .to_string(),
             "pisi --yes-all --destdir=/work/rootfs install --ignore-comar --ignore-file-conflicts --ignore-dependency python3 zlib"
         );
         assert_eq!(
