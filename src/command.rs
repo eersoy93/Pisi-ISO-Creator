@@ -452,7 +452,7 @@ impl Executor {
             let sink = self.sink.clone();
             thread::spawn(move || {
                 for line in BufReader::new(stream).split(b'\n').map_while(Result::ok) {
-                    let line = String::from_utf8_lossy(&line);
+                    let line = strip_ansi(&String::from_utf8_lossy(&line));
                     // Progress bars use carriage returns; keep the last state.
                     let line = line
                         .rsplit('\r')
@@ -587,6 +587,46 @@ fn unescape_mountinfo(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Removes ANSI/VT100 escape sequences (colors, cursor movement, titles).
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\x1b' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            // CSI: parameters and intermediates, then a final byte in @..~
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // OSC: terminated by BEL or ESC \
+            Some(']') => {
+                while let Some(c) = chars.next() {
+                    if c == '\x07' {
+                        break;
+                    }
+                    if c == '\x1b' {
+                        chars.next_if_eq(&'\\');
+                        break;
+                    }
+                }
+            }
+            // Character set selection takes one more character.
+            Some('(' | ')' | '*' | '+') => {
+                chars.next();
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 fn is_mount_point(path: &Path) -> bool {
@@ -743,6 +783,13 @@ mod tests {
             Executor::new(dry_run, Arc::new(AtomicBool::new(false)), sink),
             events,
         )
+    }
+
+    #[test]
+    fn ansi_stripping() {
+        assert_eq!(strip_ansi("\x1b[01;32mok\x1b[0m done"), "ok done");
+        assert_eq!(strip_ansi("\x1b]0;title\x07a\x1b(Bb"), "ab");
+        assert_eq!(strip_ansi("plain ü"), "plain ü");
     }
 
     #[test]
