@@ -56,8 +56,8 @@ pub struct Project {
     pub squashfs_compression: String,
     /// Extra kernel command line options for the live system.
     pub kernel_cmdline: String,
-    /// Generate a live capable initramfs with mkinitcpio and Pisi's `live`
-    /// hook (kernel parameter `boot=live`, image at `/live/pisi.sfs`).
+    /// Generate a live capable initramfs with mkinitcpio and the `pisilive`
+    /// hook (image at `/live/pisi.sfs`).
     pub live_initramfs: bool,
     /// Shell script executed inside the chroot after the packages are configured.
     pub post_install_script: String,

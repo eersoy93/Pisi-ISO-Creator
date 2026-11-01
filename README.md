@@ -12,8 +12,8 @@ feature is also available from the command line.
   2. runs the COMAR scripts inside a chroot (`pisi configure-pending`),
   3. sets the hostname, creates a passwordless live user and runs an optional
      post-install script,
-  4. generates a live initramfs with `mkinitcpio` and the `live` hook shipped
-     by Pisi's mkinitcpio package (`boot=live`),
+  4. generates a live initramfs with `mkinitcpio` and its own `pisilive`
+     hook (finds `live/pisi.sfs` and mounts it with a tmpfs overlay),
   5. compresses the root file system to `live/pisi.sfs` with SquashFS,
   6. writes a GRUB menu and creates the ISO with `grub2-mkrescue`.
 - **ISO editor** – modifies an existing (Pisi based) live ISO: extracts it,
