@@ -652,7 +652,8 @@ mod tests {
         .unwrap();
         assert_eq!(names, vec!["kernel", "libutil-linux", "python3", "zlib"]);
 
-        let err = resolve_install(std::slice::from_ref(&index), &["desktop".into()], &[]).unwrap_err();
+        let err =
+            resolve_install(std::slice::from_ref(&index), &["desktop".into()], &[]).unwrap_err();
         assert!(err.contains("desktop"));
         let err = resolve_install(&[index], &[], &["nope".into()]).unwrap_err();
         assert!(err.contains("nope"));
