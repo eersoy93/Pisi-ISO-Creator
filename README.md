@@ -20,7 +20,8 @@ feature is also available from the command line.
   unpacks the root SquashFS (found automatically), adds repositories,
   upgrades / installs / removes PiSi packages, runs a post-install script,
   recompresses the image and writes a new ISO with the original boot setup
-  (`xorriso -boot_image any replay`), optionally with a new volume label.
+  (`xorriso -boot_image any replay`, without the HFS+ tree for old Intel
+  Macs), optionally with a new volume label.
 - **Repository browser** – loads a `pisi-index.xml` or `pisi-index.xml.xz`
   (URL or local file, binary and source indexes), searches packages and adds
   them to the project with a click.

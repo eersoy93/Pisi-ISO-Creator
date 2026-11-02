@@ -281,7 +281,9 @@ pub fn edit_plan(job: &EditJob) -> Plan {
         .arg(&job.input_iso)
         .arg("-outdev")
         .arg(&job.output_iso)
-        .args(["-boot_image", "any", "replay"]);
+        .args(["-boot_image", "any", "replay"])
+        // Replaying grub-mkrescue's HFS+/APM layout onto a changed tree yields overlapping GPT entries.
+        .args(["-hfsplus", "off"]);
     if !job.volume_label.is_empty() {
         xorriso = xorriso.arg("-volid").arg(&job.volume_label);
     }
@@ -689,7 +691,7 @@ mod tests {
         }
         assert_eq!(
             cmds.last().unwrap(),
-            "xorriso -indev /in.iso -outdev out.iso -boot_image any replay -volid NEW -map /w/iso /"
+            "xorriso -indev /in.iso -outdev out.iso -boot_image any replay -hfsplus off -volid NEW -map /w/iso /"
         );
         assert!(plan.required_tools.contains(&"pisi"));
         assert!(plan.steps.iter().any(|s| matches!(
