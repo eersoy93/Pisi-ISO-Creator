@@ -93,10 +93,18 @@ pub fn build_plan(project: &Project) -> Plan {
                 .args(["-m", "-s", "/bin/bash", "-G", "wheel"])
                 .arg(&project.live_user),
         ));
-        steps.push(Step::run(
-            "Allow passwordless live login",
-            chroot(&rootfs, "passwd").arg("-d").arg(&project.live_user),
-        ));
+        if project.live_password.is_empty() {
+            steps.push(Step::run(
+                "Allow passwordless live login",
+                chroot(&rootfs, "passwd").arg("-d").arg(&project.live_user),
+            ));
+        } else {
+            steps.push(Step::run(
+                "Set live user password",
+                chroot(&rootfs, "chpasswd")
+                    .secret_stdin(format!("{}:{}\n", project.live_user, project.live_password)),
+            ));
+        }
     }
     steps.extend(post_install_steps(&rootfs, &project.post_install_script));
     if project.live_initramfs {

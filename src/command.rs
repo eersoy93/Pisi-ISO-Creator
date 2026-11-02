@@ -5,7 +5,7 @@ use crate::pisi::{Pisi, load_index, resolve_install};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -21,6 +21,18 @@ pub struct Cmd {
     pub args: Vec<OsString>,
     /// A non-zero exit status is logged but does not abort the pipeline.
     pub allow_failure: bool,
+    /// Data written to standard input; never shown in logs or plans.
+    pub stdin: Option<Secret>,
+}
+
+/// A string that is redacted in `Debug` output.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(pub String);
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret(<hidden>)")
+    }
 }
 
 impl Cmd {
@@ -29,6 +41,7 @@ impl Cmd {
             program: program.as_ref().to_owned(),
             args: Vec::new(),
             allow_failure: false,
+            stdin: None,
         }
     }
 
@@ -51,6 +64,11 @@ impl Cmd {
         self.allow_failure = true;
         self
     }
+
+    pub fn secret_stdin(mut self, data: impl Into<String>) -> Self {
+        self.stdin = Some(Secret(data.into()));
+        self
+    }
 }
 
 impl fmt::Display for Cmd {
@@ -59,6 +77,9 @@ impl fmt::Display for Cmd {
         write!(f, "{}", shell_quote(&self.program.to_string_lossy()))?;
         for arg in &self.args {
             write!(f, " {}", shell_quote(&arg.to_string_lossy()))?;
+        }
+        if self.stdin.is_some() {
+            write!(f, " < <hidden input>")?;
         }
         Ok(())
     }
@@ -468,11 +489,26 @@ impl Executor {
     fn run_command(&self, cmd: &Cmd) -> Result<(), String> {
         let mut child = Command::new(&cmd.program)
             .args(&cmd.args)
-            .stdin(Stdio::null())
+            .stdin(if cmd.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Can not start {}: {e} !", cmd.program.to_string_lossy()))?;
+        if let (Some(Secret(data)), Some(mut stdin)) = (&cmd.stdin, child.stdin.take()) {
+            // Dropping `stdin` afterwards closes the pipe (EOF).
+            if let Err(e) = stdin.write_all(data.as_bytes()) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "Can not write to {}: {e} !",
+                    cmd.program.to_string_lossy()
+                ));
+            }
+        }
 
         let readers: Vec<_> = [
             child
@@ -942,6 +978,24 @@ mod tests {
         for expected in ["out", "err"] {
             assert!(events.contains(&Event::Log(expected.into())));
         }
+    }
+
+    #[test]
+    fn secret_stdin_is_passed_but_not_shown() {
+        let (exec, events) = collecting_executor(false);
+        let cmd = Cmd::new("sh")
+            .arg("-c")
+            .arg("read x; echo \"len=${#x}\"")
+            .secret_stdin("pisi:s3cret\n");
+        assert!(!cmd.to_string().contains("s3cret"));
+        assert!(!format!("{cmd:?}").contains("s3cret"));
+        exec.run_command(&cmd).unwrap();
+        assert!(
+            events
+                .lock()
+                .unwrap()
+                .contains(&Event::Log("len=11".into()))
+        );
     }
 
     #[test]

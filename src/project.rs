@@ -38,8 +38,10 @@ pub struct Project {
     pub volume_label: String,
     /// Hostname of the live system.
     pub hostname: String,
-    /// Passwordless live user. Leave empty to not create one.
+    /// Live user. Leave empty to not create one.
     pub live_user: String,
+    /// Password of the live user, stored in plain text. Empty = no password.
+    pub live_password: String,
     /// PiSi repositories used to install the root file system.
     pub repositories: Vec<Repository>,
     /// PiSi components (with sub-components) to install.
@@ -71,6 +73,7 @@ impl Default for Project {
             volume_label: "PISI_LIVE".into(),
             hostname: "pisi".into(),
             live_user: "pisi".into(),
+            live_password: String::new(),
             repositories: vec![Repository::new(
                 "pisi-2.0",
                 "https://stable2.pisilinux.org/pisi-index.xml.xz",
@@ -123,6 +126,9 @@ impl Project {
         }
         if !self.live_user.is_empty() && !is_valid_user_name(&self.live_user) {
             errors.push(format!("Invalid live user name '{}'!", self.live_user));
+        }
+        if has_control_chars(&self.live_password) {
+            errors.push("Live user password must not contain control characters!".into());
         }
         if self.repositories.is_empty() {
             errors.push("At least one PiSi repository is required!".into());

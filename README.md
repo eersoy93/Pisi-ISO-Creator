@@ -10,7 +10,7 @@ feature is also available from the command line.
   1. installs PiSi components and packages from the configured PiSi
      repositories into a fresh root file system (`pisi --destdir=…`),
   2. runs the COMAR scripts inside a chroot (`pisi configure-pending`),
-  3. sets the hostname, creates a passwordless live user and runs an optional
+  3. sets the hostname, creates a live user (optionally with a password) and runs an optional
      post-install script,
   4. generates a live initramfs with `mkinitcpio` and its own `pisilive`
      hook (finds `live/pisi.sfs` and mounts it with a tmpfs overlay),
@@ -78,6 +78,7 @@ version = "2.0"
 volume_label = "PISI_LIVE"          # ISO9660 label, max. 32 chars [A-Za-z0-9_-]
 hostname = "pisi"
 live_user = "pisi"                  # empty = no live user
+live_password = ""                  # plain text; empty = no password
 components = ["system.base"]        # with sub-components and all dependencies
 packages = ["kernel", "mkinitcpio", "grub2"]
 excluded_packages = []              # removed again after installation

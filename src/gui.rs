@@ -363,6 +363,7 @@ fn project_to_ui(ui: &AppWindow, p: &Project) {
     ui.set_volume_label(p.volume_label.clone().into());
     ui.set_hostname(p.hostname.clone().into());
     ui.set_live_user(p.live_user.clone().into());
+    ui.set_live_password(p.live_password.clone().into());
     ui.set_work_dir(p.work_dir.display().to_string().into());
     ui.set_output_iso(p.output_iso.display().to_string().into());
     ui.set_compression(p.squashfs_compression.clone().into());
@@ -382,6 +383,7 @@ fn ui_to_project(ui: &AppWindow) -> Result<Project, String> {
         volume_label: ui.get_volume_label().trim().to_string(),
         hostname: ui.get_hostname().trim().to_string(),
         live_user: ui.get_live_user().trim().to_string(),
+        live_password: ui.get_live_password().to_string(),
         repositories: parse_repositories(&ui.get_repositories())?,
         components: parse_list(&ui.get_components()),
         packages: parse_list(&ui.get_packages()),

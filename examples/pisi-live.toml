@@ -3,6 +3,7 @@ version = "2.0"
 volume_label = "PISI_LIVE"
 hostname = "pisi"
 live_user = "pisi"
+live_password = ""
 components = ["system.base"]
 packages = [
     "kernel",

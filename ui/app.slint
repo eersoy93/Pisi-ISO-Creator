@@ -39,6 +39,7 @@ export component AppWindow inherits Window {
     in-out property <string> volume-label;
     in-out property <string> hostname;
     in-out property <string> live-user;
+    in-out property <string> live-password;
     in-out property <string> work-dir;
     in-out property <string> output-iso;
     in-out property <string> compression: "xz";
@@ -120,6 +121,7 @@ export component AppWindow inherits Window {
                                     Field { label: "Volume label:"; LineEdit { text <=> root.volume-label; placeholder-text: "PISI_LIVE (max. 32 chars)"; } }
                                     Field { label: "Hostname:"; LineEdit { text <=> root.hostname; } }
                                     Field { label: "Live user:"; LineEdit { text <=> root.live-user; placeholder-text: "empty = no live user"; } }
+                                    Field { label: "Live password:"; LineEdit { text <=> root.live-password; input-type: password; placeholder-text: "empty = no password"; } }
                                 }
                             }
                             GroupBox {
