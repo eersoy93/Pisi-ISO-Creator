@@ -101,10 +101,22 @@ pub fn build_plan(project: &Project) -> Plan {
         } else {
             steps.push(Step::run(
                 "Set live user password",
+                // Pisi's /etc/pam.d/chpasswd only has pam_permit; -c makes chpasswd write the hash itself.
                 chroot(&rootfs, "chpasswd")
+                    .args(["-c", "SHA512"])
                     .secret_stdin(format!("{}:{}\n", project.live_user, project.live_password)),
             ));
         }
+        steps.push(Step::run(
+            "Check that the live user account is not locked",
+            chroot(&rootfs, "/bin/sh")
+                .arg("-c")
+                .arg(
+                    "s=$(passwd -S \"$0\") || exit 1; set -- $s; [ \"$2\" != L ] || \
+                     { echo \"Account $0 is locked!\" >&2; exit 1; }",
+                )
+                .arg(&project.live_user),
+        ));
     }
     steps.extend(post_install_steps(&rootfs, &project.post_install_script));
     if project.live_initramfs {
