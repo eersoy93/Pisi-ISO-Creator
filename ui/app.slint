@@ -1,31 +1,51 @@
-import { Button, CheckBox, ComboBox, LineEdit, TextEdit, TabWidget, StandardListView,
-         ProgressIndicator, VerticalBox, HorizontalBox, ScrollView, Palette } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, TextEdit, StandardListView,
+         VerticalBox, HorizontalBox, ScrollView, Palette } from "std-widgets.slint";
+
+/// Brand colors (#D9005B, #333333) and theme dependent surfaces.
+global Theme {
+    in-out property <bool> dark;
+    out property <color> primary: #D9005B;
+    out property <color> primary-hover: #B8004C;
+    out property <color> charcoal: #333333;
+    out property <color> window: dark ? #262626 : #F2F2F2;
+    out property <color> surface: dark ? #333333 : #FFFFFF;
+    out property <color> text: dark ? #F2F2F2 : #333333;
+    out property <color> muted: dark ? #B3B3B3 : #6B6B6B;
+    out property <color> border: dark ? #4A4A4A : #DDDDDD;
+}
 
 component Hint inherits Text {
     font-size: 11px;
-    color: Palette.foreground;
-    opacity: 0.65;
+    color: Theme.muted;
     wrap: word-wrap;
 }
 
 component Title inherits Text {
     font-size: 14px;
     font-weight: 600;
-    color: Palette.foreground;
+    color: Theme.text;
 }
 
 /// Rounded, bordered panel used to group related settings.
 component Card inherits Rectangle {
     in property <string> title;
     in property <string> subtitle;
-    background: Palette.alternate-background;
+    background: Theme.surface;
     border-radius: 8px;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: Theme.border;
     VerticalLayout {
         padding: 12px;
         spacing: 8px;
-        if root.title != "": Title { text: root.title; }
+        if root.title != "": HorizontalLayout {
+            spacing: 8px;
+            Rectangle {
+                width: 4px;
+                border-radius: 2px;
+                background: Theme.primary;
+            }
+            Title { text: root.title; }
+        }
         if root.subtitle != "": Hint { text: root.subtitle; }
         @children
     }
@@ -38,7 +58,7 @@ component Field inherits HorizontalLayout {
         text: root.label;
         min-width: 170px;
         vertical-alignment: center;
-        color: Palette.foreground;
+        color: Theme.text;
     }
 }
 
@@ -56,13 +76,105 @@ component FileBar inherits HorizontalLayout {
     in property <string> label;
     in-out property <string> path;
     spacing: 8px;
-    Text { text: root.label; vertical-alignment: center; color: Palette.foreground; }
+    Text { text: root.label; vertical-alignment: center; color: Theme.text; }
     LineEdit { text <=> root.path; horizontal-stretch: 1; }
     @children
 }
 
+/// Filled button in the brand color for the main action of a page.
+component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    min-width: label.preferred-width + 32px;
+    min-height: 40px;
+    border-radius: 20px;
+    background: !root.enabled ? Theme.border
+        : touch.pressed ? Theme.primary-hover.darker(0.1)
+        : touch.has-hover ? Theme.primary-hover : Theme.primary;
+    label := Text {
+        text: root.text;
+        color: root.enabled ? #FFFFFF : Theme.muted;
+        font-weight: 600;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component ProgressBar inherits Rectangle {
+    in property <float> progress;
+    height: 8px;
+    border-radius: 4px;
+    background: Theme.border;
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.progress, 0, 1);
+        border-radius: parent.border-radius;
+        background: Theme.primary;
+    }
+}
+
+/// Row of selectable labels with a brand colored underline.
+component TabBar inherits HorizontalLayout {
+    in property <[string]> tabs;
+    in-out property <int> current;
+    spacing: 4px;
+    for tab[index] in root.tabs: Rectangle {
+        min-width: tab-label.preferred-width + 32px;
+        height: 40px;
+        tab-label := Text {
+            text: tab;
+            font-size: 14px;
+            font-weight: index == root.current ? 700 : 500;
+            color: index == root.current ? Theme.primary : Theme.text;
+        }
+        Rectangle {
+            y: parent.height - self.height;
+            height: 3px;
+            border-radius: 1.5px;
+            background: index == root.current ? Theme.primary
+                : tab-touch.has-hover ? Theme.border : transparent;
+        }
+        tab-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.current = index; }
+        }
+    }
+}
+
+/// Segmented switch for the color theme, drawn on the dark header.
+component ThemeSwitch inherits Rectangle {
+    in-out property <int> current;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: #FFFFFF40;
+    height: 32px;
+    HorizontalLayout {
+        padding: 2px;
+        for option[index] in ["System", "Light", "Dark"]: Rectangle {
+            min-width: option-label.preferred-width + 20px;
+            border-radius: 14px;
+            background: index == root.current ? Theme.primary
+                : option-touch.has-hover ? #FFFFFF20 : transparent;
+            option-label := Text {
+                text: option;
+                font-size: 12px;
+                color: #FFFFFF;
+            }
+            option-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.current = index; }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Pisi ISO Creator";
+    icon: @image-url("pisi-logo.svg");
     preferred-width: 1100px;
     preferred-height: 700px;
     min-width: 760px;
@@ -117,6 +229,9 @@ export component AppWindow inherits Window {
     // ---- Appearance ----
     /// 0 = follow the system, 1 = light, 2 = dark.
     in-out property <int> theme: 0;
+    property <int> current-tab: 0;
+    // Remembered before the first override so "System" can be restored.
+    property <bool> system-dark;
 
     callback new-project();
     callback open-project();
@@ -136,74 +251,78 @@ export component AppWindow inherits Window {
     callback clear-log();
 
     function apply-theme() {
-        Palette.color-scheme = root.theme == 1 ? ColorScheme.light
-            : root.theme == 2 ? ColorScheme.dark : ColorScheme.unknown;
+        Theme.dark = root.theme == 2 || (root.theme == 0 && root.system-dark);
+        Palette.color-scheme = Theme.dark ? ColorScheme.dark : ColorScheme.light;
     }
-    init => { root.apply-theme(); }
+    init => {
+        root.system-dark = Palette.color-scheme == ColorScheme.dark;
+        root.apply-theme();
+    }
     changed theme => { root.apply-theme(); }
+
+    background: Theme.window;
 
     VerticalLayout {
         // ---- Header ----
         Rectangle {
-            background: Palette.accent-background;
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                padding-top: 10px;
-                padding-bottom: 10px;
-                spacing: 12px;
+            background: Theme.charcoal;
+            VerticalLayout {
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 10px;
+                    padding-bottom: 10px;
+                    spacing: 12px;
+                    // White plate keeps the logo's #333333 outline visible on the dark header.
+                    Rectangle {
+                        width: 44px;
+                        height: 44px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 10px;
+                        background: #FFFFFF;
+                        Image {
+                            width: 36px;
+                            height: 36px;
+                            source: @image-url("pisi-logo.svg");
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: "Pisi ISO Creator";
+                            font-size: 18px;
+                            font-weight: 700;
+                            color: #FFFFFF;
+                        }
+                        Text {
+                            text: "Build and edit live ISO images of Pisi GNU/Linux";
+                            font-size: 12px;
+                            color: #FFFFFFB3;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        ThemeSwitch { current <=> root.theme; }
+                    }
+                }
                 Rectangle {
-                    width: 36px;
-                    height: 36px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 18px;
-                    background: Palette.accent-foreground;
-                    Text {
-                        text: "P";
-                        font-size: 20px;
-                        font-weight: 800;
-                        color: Palette.accent-background;
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    Text {
-                        text: "Pisi ISO Creator";
-                        font-size: 18px;
-                        font-weight: 700;
-                        color: Palette.accent-foreground;
-                    }
-                    Text {
-                        text: "Build and edit live ISO images of Pisi GNU/Linux";
-                        font-size: 12px;
-                        color: Palette.accent-foreground;
-                        opacity: 0.85;
-                    }
-                }
-                Text {
-                    text: "Theme:";
-                    vertical-alignment: center;
-                    color: Palette.accent-foreground;
-                }
-                VerticalLayout {
-                    alignment: center;
-                    ComboBox {
-                        model: ["System", "Light", "Dark"];
-                        current-index <=> root.theme;
-                        width: 120px;
-                    }
+                    height: 3px;
+                    background: Theme.primary;
                 }
             }
         }
 
         VerticalBox {
-            TabWidget {
+            VerticalLayout {
                 vertical-stretch: 3;
+                spacing: 8px;
+                TabBar {
+                    tabs: ["Project", "Packages", "Edit ISO"];
+                    current <=> root.current-tab;
+                }
 
-                Tab {
-                    title: "Project";
-                    VerticalLayout {
+                if root.current-tab == 0: VerticalLayout {
                         ScrollView {
                             VerticalBox {
                                 FileBar {
@@ -254,19 +373,15 @@ export component AppWindow inherits Window {
                             alignment: end;
                             Button { text: "Validate"; clicked => { root.validate-project(); } }
                             Button { text: "Show Build Plan"; clicked => { root.show-plan(); } }
-                            Button {
+                            PrimaryButton {
                                 text: root.dry-run ? "Build ISO (Dry Run)" : "Build ISO";
-                                primary: true;
                                 enabled: !root.running;
                                 clicked => { root.build-iso(); }
                             }
                         }
-                    }
                 }
 
-                Tab {
-                    title: "Packages";
-                    HorizontalBox {
+                if root.current-tab == 1: HorizontalBox {
                         ScrollView {
                             horizontal-stretch: 1;
                             VerticalBox {
@@ -325,7 +440,7 @@ export component AppWindow inherits Window {
                                 text: root.package-details;
                                 wrap: word-wrap;
                                 min-height: 60px;
-                                color: Palette.foreground;
+                                color: Theme.text;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -346,12 +461,9 @@ export component AppWindow inherits Window {
                                 }
                             }
                         }
-                    }
                 }
 
-                Tab {
-                    title: "Edit ISO";
-                    VerticalLayout {
+                if root.current-tab == 2: VerticalLayout {
                         ScrollView {
                             VerticalBox {
                                 FileBar {
@@ -401,14 +513,12 @@ export component AppWindow inherits Window {
                         HorizontalBox {
                             alignment: end;
                             Button { text: "Show Edit Plan"; clicked => { root.show-edit-plan(); } }
-                            Button {
+                            PrimaryButton {
                                 text: root.dry-run ? "Edit ISO (Dry Run)" : "Edit ISO";
-                                primary: true;
                                 enabled: !root.running;
                                 clicked => { root.edit-iso(); }
                             }
                         }
-                    }
                 }
             }
 
@@ -424,10 +534,7 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         horizontal-stretch: 1;
                         alignment: center;
-                        ProgressIndicator {
-                            progress: root.progress;
-                            height: 10px;
-                        }
+                        ProgressBar { progress: root.progress; }
                     }
                     Button { text: "Cancel"; enabled: root.running; clicked => { root.cancel(); } }
                     Button { text: "Clear Log"; clicked => { root.clear-log(); } }
@@ -439,13 +546,13 @@ export component AppWindow inherits Window {
                         height: 10px;
                         y: (parent.height - self.height) / 2;
                         border-radius: 5px;
-                        background: root.running ? Palette.accent-background : Palette.border;
+                        background: root.running ? Theme.primary : Theme.border;
                     }
                     Text {
                         text: root.status-text;
                         wrap: word-wrap;
                         horizontal-stretch: 1;
-                        color: Palette.foreground;
+                        color: Theme.text;
                     }
                 }
             }
@@ -453,10 +560,10 @@ export component AppWindow inherits Window {
             Rectangle {
                 vertical-stretch: 2;
                 min-height: 100px;
-                background: Palette.alternate-background;
+                background: Theme.charcoal;
                 border-radius: 8px;
                 border-width: 1px;
-                border-color: Palette.border;
+                border-color: Theme.border;
                 clip: true;
                 log-view := ScrollView {
                     content-width: max(self.visible-width, log-label.preferred-width + 16px);
@@ -468,7 +575,7 @@ export component AppWindow inherits Window {
                         font-family: "monospace";
                         font-size: 12px;
                         wrap: no-wrap;
-                        color: Palette.foreground;
+                        color: #E6E6E6;
                     }
                 }
             }

@@ -59,6 +59,15 @@ cargo build --release
 sudo ./target/release/pisi-iso-creator          # graphical interface
 ```
 
+The interface is compiled with Slint's `material` style by default. Another
+style can be selected at build time with the `SLINT_STYLE` environment
+variable (`material`, `fluent`, `cosmic`, `cupertino`, `qt`; `qt` needs Qt 6
+at build time):
+
+```sh
+SLINT_STYLE=fluent cargo build --release
+```
+
 Command line usage:
 
 ```text
@@ -87,7 +96,7 @@ work_dir = "/var/tmp/pisi-iso-creator"
 output_iso = "pisi-live.iso"
 squashfs_compression = "xz"         # xz, zstd, gzip, lzo, lz4
 kernel_cmdline = "quiet splash"
-live_initramfs = true               # mkinitcpio + Pisi "live" hook
+live_initramfs = true               # mkinitcpio + "pisilive" hook
 post_install_script = ""            # executed with /bin/sh -e in the chroot
 
 [[repositories]]
