@@ -1,28 +1,65 @@
 import { Button, CheckBox, ComboBox, LineEdit, TextEdit, TabWidget, StandardListView,
-         GroupBox, ProgressIndicator, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+         ProgressIndicator, VerticalBox, HorizontalBox, ScrollView, Palette } from "std-widgets.slint";
+
+component Hint inherits Text {
+    font-size: 11px;
+    color: Palette.foreground;
+    opacity: 0.65;
+    wrap: word-wrap;
+}
+
+component Title inherits Text {
+    font-size: 14px;
+    font-weight: 600;
+    color: Palette.foreground;
+}
+
+/// Rounded, bordered panel used to group related settings.
+component Card inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    background: Palette.alternate-background;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Palette.border;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        if root.title != "": Title { text: root.title; }
+        if root.subtitle != "": Hint { text: root.subtitle; }
+        @children
+    }
+}
 
 component Field inherits HorizontalLayout {
     in property <string> label;
     spacing: 8px;
     Text {
         text: root.label;
-        min-width: 150px;
+        min-width: 170px;
         vertical-alignment: center;
+        color: Palette.foreground;
     }
 }
 
-component ListEditor inherits VerticalLayout {
-    in property <string> title;
-    in property <string> hint;
+component ListEditor inherits Card {
     in-out property <string> text;
-    spacing: 4px;
-    Text { text: root.title; font-weight: 700; }
-    Text { text: root.hint; font-size: 11px; color: #888; wrap: word-wrap; }
+    min-height: 150px;
     TextEdit {
         text <=> root.text;
         min-height: 80px;
         vertical-stretch: 1;
+        font-size: 13px;
     }
+}
+
+component FileBar inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> path;
+    spacing: 8px;
+    Text { text: root.label; vertical-alignment: center; color: Palette.foreground; }
+    LineEdit { text <=> root.path; horizontal-stretch: 1; }
+    @children
 }
 
 export component AppWindow inherits Window {
@@ -78,6 +115,10 @@ export component AppWindow inherits Window {
     in property <string> log-text;
     in property <[string]> compressions: ["xz", "zstd", "gzip", "lzo", "lz4"];
 
+    // ---- Appearance ----
+    /// 0 = follow the system, 1 = light, 2 = dark.
+    in-out property <int> theme: 0;
+
     callback new-project();
     callback open-project();
     callback save-project();
@@ -95,106 +136,167 @@ export component AppWindow inherits Window {
     callback cancel();
     callback clear-log();
 
-    VerticalBox {
-        TabWidget {
-            vertical-stretch: 3;
+    function apply-theme() {
+        Palette.color-scheme = root.theme == 1 ? ColorScheme.light
+            : root.theme == 2 ? ColorScheme.dark : ColorScheme.unknown;
+    }
+    init => { root.apply-theme(); }
+    changed theme => { root.apply-theme(); }
 
-            Tab {
-                title: "Project";
-                VerticalLayout {
-                    ScrollView {
-                        VerticalBox {
-                            HorizontalBox {
-                                padding: 0;
-                                Text { text: "Project file:"; vertical-alignment: center; }
-                                LineEdit { text <=> root.project-path; horizontal-stretch: 1; }
-                                Button { text: "New"; clicked => { root.new-project(); } }
-                                Button { text: "Open"; clicked => { root.open-project(); } }
-                                Button { text: "Save"; clicked => { root.save-project(); } }
-                            }
-                            GroupBox {
-                                title: "Distribution";
-                                VerticalLayout {
-                                    spacing: 6px;
-                                    Field { label: "Name:"; LineEdit { text <=> root.distro-name; } }
-                                    Field { label: "Version:"; LineEdit { text <=> root.distro-version; } }
-                                    Field { label: "Volume label:"; LineEdit { text <=> root.volume-label; placeholder-text: "PISI_LIVE (max. 32 chars)"; } }
-                                    Field { label: "Hostname:"; LineEdit { text <=> root.hostname; } }
-                                    Field { label: "Live user:"; LineEdit { text <=> root.live-user; placeholder-text: "empty = no live user"; } }
-                                    Field { label: "Live password:"; LineEdit { text <=> root.live-password; input-type: password; placeholder-text: "empty = no password"; } }
-                                }
-                            }
-                            GroupBox {
-                                title: "Image";
-                                VerticalLayout {
-                                    spacing: 6px;
-                                    Field { label: "Work directory:"; LineEdit { text <=> root.work-dir; } }
-                                    Field { label: "Output ISO:"; LineEdit { text <=> root.output-iso; } }
-                                    Field {
-                                        label: "SquashFS compression:";
-                                        ComboBox { model: root.compressions; current-value <=> root.compression; }
-                                    }
-                                    Field { label: "Kernel parameters:"; LineEdit { text <=> root.kernel-cmdline; } }
-                                    CheckBox {
-                                        text: "Generate live initramfs with mkinitcpio (Pisi 'live' hook, boot=live)";
-                                        checked <=> root.live-initramfs;
-                                    }
-                                }
-                            }
-                            ListEditor {
-                                title: "Post-install script";
-                                hint: "Shell script run inside the chroot (/bin/sh -e) after all packages are configured.";
-                                text <=> root.post-install-script;
-                            }
-                        }
+    VerticalLayout {
+        // ---- Header ----
+        Rectangle {
+            background: Palette.accent-background;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                spacing: 12px;
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 18px;
+                    background: Palette.accent-foreground;
+                    Text {
+                        text: "P";
+                        font-size: 20px;
+                        font-weight: 800;
+                        color: Palette.accent-background;
                     }
-                    HorizontalBox {
-                        alignment: end;
-                        Button { text: "Validate"; clicked => { root.validate-project(); } }
-                        Button { text: "Show Build Plan"; clicked => { root.show-plan(); } }
-                        Button {
-                            text: root.dry-run ? "Build ISO (Dry Run)" : "Build ISO";
-                            primary: true;
-                            enabled: !root.running;
-                            clicked => { root.build-iso(); }
-                        }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: "Pisi ISO Creator";
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Palette.accent-foreground;
+                    }
+                    Text {
+                        text: "Build and edit live ISO images of Pisi GNU/Linux";
+                        font-size: 12px;
+                        color: Palette.accent-foreground;
+                        opacity: 0.85;
+                    }
+                }
+                Text {
+                    text: "Theme:";
+                    vertical-alignment: center;
+                    color: Palette.accent-foreground;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ComboBox {
+                        model: ["System", "Light", "Dark"];
+                        current-index <=> root.theme;
+                        width: 120px;
                     }
                 }
             }
+        }
 
-            Tab {
-                title: "Packages";
-                HorizontalBox {
-                    ScrollView {
-                        horizontal-stretch: 1;
-                        VerticalBox {
-                            ListEditor {
-                                title: "PiSi Repositories";
-                                hint: "One '<name> <pisi-index.xml(.xz) URL>' per line.";
-                                text <=> root.repositories;
+        VerticalBox {
+            TabWidget {
+                vertical-stretch: 3;
+
+                Tab {
+                    title: "Project";
+                    VerticalLayout {
+                        ScrollView {
+                            VerticalBox {
+                                FileBar {
+                                    label: "Project file:";
+                                    path <=> root.project-path;
+                                    Button { text: "New"; clicked => { root.new-project(); } }
+                                    Button { text: "Open"; clicked => { root.open-project(); } }
+                                    Button { text: "Save"; clicked => { root.save-project(); } }
+                                }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    Card {
+                                        title: "Distribution";
+                                        subtitle: "Shown in the boot menu and written to /etc/os-release.";
+                                        horizontal-stretch: 1;
+                                        Field { label: "Name:"; LineEdit { text <=> root.distro-name; } }
+                                        Field { label: "Version:"; LineEdit { text <=> root.distro-version; } }
+                                        Field { label: "Volume label:"; LineEdit { text <=> root.volume-label; placeholder-text: "PISI_LIVE (max. 32 chars)"; } }
+                                        Field { label: "Hostname:"; LineEdit { text <=> root.hostname; } }
+                                        Field { label: "Live user:"; LineEdit { text <=> root.live-user; placeholder-text: "empty = no live user"; } }
+                                        Field { label: "Live password:"; LineEdit { text <=> root.live-password; input-type: password; placeholder-text: "empty = no password"; } }
+                                    }
+                                    Card {
+                                        title: "Image";
+                                        subtitle: "Where and how the ISO image is built.";
+                                        horizontal-stretch: 1;
+                                        Field { label: "Work directory:"; LineEdit { text <=> root.work-dir; } }
+                                        Field { label: "Output ISO:"; LineEdit { text <=> root.output-iso; } }
+                                        Field {
+                                            label: "SquashFS compression:";
+                                            ComboBox { model: root.compressions; current-value <=> root.compression; }
+                                        }
+                                        Field { label: "Kernel parameters:"; LineEdit { text <=> root.kernel-cmdline; } }
+                                        CheckBox {
+                                            text: "Generate live initramfs (mkinitcpio, pisilive hook)";
+                                            checked <=> root.live-initramfs;
+                                        }
+                                    }
+                                }
+                                ListEditor {
+                                    title: "Post-install script";
+                                    subtitle: "Shell script run inside the chroot (/bin/sh -e) after all packages are configured.";
+                                    text <=> root.post-install-script;
+                                }
                             }
-                            ListEditor {
-                                title: "Components";
-                                hint: "Installed with 'pisi install -c', e.g. system.base.";
-                                text <=> root.components;
-                            }
-                            ListEditor {
-                                title: "Packages";
-                                hint: "One package per line (dependencies are resolved by PiSi).";
-                                text <=> root.packages;
-                            }
-                            ListEditor {
-                                title: "Excluded Packages";
-                                hint: "Removed after installation.";
-                                text <=> root.excluded-packages;
+                        }
+                        HorizontalBox {
+                            alignment: end;
+                            Button { text: "Validate"; clicked => { root.validate-project(); } }
+                            Button { text: "Show Build Plan"; clicked => { root.show-plan(); } }
+                            Button {
+                                text: root.dry-run ? "Build ISO (Dry Run)" : "Build ISO";
+                                primary: true;
+                                enabled: !root.running;
+                                clicked => { root.build-iso(); }
                             }
                         }
                     }
-                    GroupBox {
-                        title: "Repository Browser";
-                        horizontal-stretch: 1;
-                        VerticalLayout {
-                            spacing: 6px;
+                }
+
+                Tab {
+                    title: "Packages";
+                    HorizontalBox {
+                        ScrollView {
+                            horizontal-stretch: 1;
+                            VerticalBox {
+                                ListEditor {
+                                    title: "PiSi Repositories";
+                                    subtitle: "One '<name> <pisi-index.xml(.xz) URL>' per line.";
+                                    text <=> root.repositories;
+                                }
+                                ListEditor {
+                                    title: "Components";
+                                    subtitle: "Installed with their sub-components, e.g. system.base.";
+                                    text <=> root.components;
+                                }
+                                ListEditor {
+                                    title: "Packages";
+                                    subtitle: "One package per line; dependencies are resolved automatically.";
+                                    text <=> root.packages;
+                                }
+                                ListEditor {
+                                    title: "Excluded Packages";
+                                    subtitle: "Removed again after installation.";
+                                    text <=> root.excluded-packages;
+                                }
+                            }
+                        }
+                        Card {
+                            title: "Repository Browser";
+                            subtitle: "Load a repository index to search and add packages.";
+                            horizontal-stretch: 1;
                             HorizontalLayout {
                                 spacing: 6px;
                                 LineEdit {
@@ -203,12 +305,12 @@ export component AppWindow inherits Window {
                                     accepted => { root.load-index(); }
                                 }
                                 Button {
-                                    text: "Load Index";
+                                    text: root.index-loading ? "Loading…" : "Load Index";
                                     enabled: !root.index-loading;
                                     clicked => { root.load-index(); }
                                 }
                             }
-                            Text { text: root.index-status; wrap: word-wrap; }
+                            Hint { text: root.index-status; }
                             LineEdit {
                                 text <=> root.search-text;
                                 placeholder-text: "Search packages…";
@@ -224,6 +326,7 @@ export component AppWindow inherits Window {
                                 text: root.package-details;
                                 wrap: word-wrap;
                                 min-height: 60px;
+                                color: Palette.foreground;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -246,24 +349,21 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
-            }
 
-            Tab {
-                title: "Edit ISO";
-                VerticalLayout {
-                    ScrollView {
-                        VerticalBox {
-                            HorizontalBox {
-                                padding: 0;
-                                Text { text: "Edit job file:"; vertical-alignment: center; }
-                                LineEdit { text <=> root.edit-job-path; horizontal-stretch: 1; }
-                                Button { text: "Open"; clicked => { root.load-edit-job(); } }
-                                Button { text: "Save"; clicked => { root.save-edit-job(); } }
-                            }
-                            GroupBox {
-                                title: "Image";
-                                VerticalLayout {
-                                    spacing: 6px;
+                Tab {
+                    title: "Edit ISO";
+                    VerticalLayout {
+                        ScrollView {
+                            VerticalBox {
+                                FileBar {
+                                    label: "Edit job file:";
+                                    path <=> root.edit-job-path;
+                                    Button { text: "Open"; clicked => { root.load-edit-job(); } }
+                                    Button { text: "Save"; clicked => { root.save-edit-job(); } }
+                                }
+                                Card {
+                                    title: "Image";
+                                    subtitle: "Modifies an existing live ISO and keeps its boot setup.";
                                     Field { label: "Input ISO:"; LineEdit { text <=> root.edit-input-iso; placeholder-text: "existing Pisi GNU/Linux ISO"; } }
                                     Field { label: "Output ISO:"; LineEdit { text <=> root.edit-output-iso; } }
                                     Field { label: "Work directory:"; LineEdit { text <=> root.edit-work-dir; } }
@@ -274,77 +374,104 @@ export component AppWindow inherits Window {
                                     }
                                     CheckBox { text: "Upgrade all installed packages (pisi upgrade)"; checked <=> root.edit-upgrade; }
                                 }
-                            }
-                            HorizontalBox {
-                                padding: 0;
-                                ListEditor {
-                                    title: "Packages to Install";
-                                    hint: "One per line.";
-                                    text <=> root.edit-install;
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    ListEditor {
+                                        title: "Packages to Install";
+                                        subtitle: "One per line.";
+                                        text <=> root.edit-install;
+                                    }
+                                    ListEditor {
+                                        title: "Packages to Remove";
+                                        subtitle: "One per line.";
+                                        text <=> root.edit-remove;
+                                    }
                                 }
                                 ListEditor {
-                                    title: "Packages to Remove";
-                                    hint: "One per line.";
-                                    text <=> root.edit-remove;
+                                    title: "Additional Repositories";
+                                    subtitle: "One '<name> <pisi-index.xml(.xz) URL>' per line, added to the image.";
+                                    text <=> root.edit-repositories;
                                 }
-                            }
-                            ListEditor {
-                                title: "Additional Repositories";
-                                hint: "One '<name> <pisi-index.xml(.xz) URL>' per line, added to the image.";
-                                text <=> root.edit-repositories;
-                            }
-                            ListEditor {
-                                title: "Post-Install Script";
-                                hint: "Shell script run inside the image's chroot (/bin/sh -e).";
-                                text <=> root.edit-script;
+                                ListEditor {
+                                    title: "Post-Install Script";
+                                    subtitle: "Shell script run inside the image's chroot (/bin/sh -e).";
+                                    text <=> root.edit-script;
+                                }
                             }
                         }
-                    }
-                    HorizontalBox {
-                        alignment: end;
-                        Button { text: "Show Edit Plan"; clicked => { root.show-edit-plan(); } }
-                        Button {
-                            text: root.dry-run ? "Edit ISO (Dry Run)" : "Edit ISO";
-                            primary: true;
-                            enabled: !root.running;
-                            clicked => { root.edit-iso(); }
+                        HorizontalBox {
+                            alignment: end;
+                            Button { text: "Show Edit Plan"; clicked => { root.show-edit-plan(); } }
+                            Button {
+                                text: root.dry-run ? "Edit ISO (Dry Run)" : "Edit ISO";
+                                primary: true;
+                                enabled: !root.running;
+                                clicked => { root.edit-iso(); }
+                            }
                         }
                     }
                 }
             }
-        }
 
-        HorizontalBox {
-            padding: 0;
-            CheckBox {
-                text: "Dry run (only show commands)";
-                checked <=> root.dry-run;
-                enabled: !root.running;
-            }
-            VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-                ProgressIndicator {
-                    progress: root.progress;
-                    height: 12px;
+            // ---- Run status ----
+            Card {
+                HorizontalLayout {
+                    spacing: 12px;
+                    CheckBox {
+                        text: "Dry run (only show commands)";
+                        checked <=> root.dry-run;
+                        enabled: !root.running;
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        ProgressIndicator {
+                            progress: root.progress;
+                            height: 10px;
+                        }
+                    }
+                    Button { text: "Cancel"; enabled: root.running; clicked => { root.cancel(); } }
+                    Button { text: "Clear Log"; clicked => { root.clear-log(); } }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        width: 10px;
+                        height: 10px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 5px;
+                        background: root.running ? Palette.accent-background : Palette.border;
+                    }
+                    Text {
+                        text: root.status-text;
+                        wrap: word-wrap;
+                        horizontal-stretch: 1;
+                        color: Palette.foreground;
+                    }
                 }
             }
-            Button { text: "Cancel"; enabled: root.running; clicked => { root.cancel(); } }
-            Button { text: "Clear Log"; clicked => { root.clear-log(); } }
-        }
-        Text { text: root.status-text; wrap: word-wrap; }
-        log-view := ScrollView {
-            vertical-stretch: 2;
-            min-height: 100px;
-            content-width: max(self.visible-width, log-label.preferred-width + 8px);
-            content-height: max(self.visible-height, log-label.preferred-height + 8px);
-            log-label := Text {
-                x: 4px;
-                y: 4px;
-                text: root.log-text;
-                font-family: "monospace";
-                font-size: 12px;
-                wrap: no-wrap;
+
+            Rectangle {
+                vertical-stretch: 2;
+                min-height: 100px;
+                background: Palette.alternate-background;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: Palette.border;
+                clip: true;
+                log-view := ScrollView {
+                    content-width: max(self.visible-width, log-label.preferred-width + 16px);
+                    content-height: max(self.visible-height, log-label.preferred-height + 16px);
+                    log-label := Text {
+                        x: 8px;
+                        y: 8px;
+                        text: root.log-text;
+                        font-family: "monospace";
+                        font-size: 12px;
+                        wrap: no-wrap;
+                        color: Palette.foreground;
+                    }
+                }
             }
         }
     }
