@@ -86,6 +86,28 @@ pub fn build_plan(project: &Project) -> Plan {
             },
         ));
     }
+    let pretty_name = format!("{} {}", project.name, project.version)
+        .trim()
+        .to_string();
+    steps.push(Step::new(
+        "Set distribution name and version in /etc/os-release",
+        Action::SetVariables {
+            path: rootfs.join("etc/os-release"),
+            values: vec![
+                ("NAME".into(), project.name.clone()),
+                ("VERSION".into(), project.version.clone()),
+                ("VERSION_ID".into(), project.version.clone()),
+                ("PRETTY_NAME".into(), pretty_name.clone()),
+            ],
+        },
+    ));
+    steps.push(Step::new(
+        "Set distribution name and version in /etc/pisilinux-release",
+        Action::WriteFile {
+            path: rootfs.join("etc/pisilinux-release"),
+            contents: format!("{pretty_name}\n"),
+        },
+    ));
     if !project.live_user.is_empty() {
         steps.push(Step::run(
             format!("Create live user '{}'", project.live_user),

@@ -114,6 +114,12 @@ pub enum Action {
         path: PathBuf,
         contents: String,
     },
+    /// Sets `KEY="value"` lines of a shell-style variable file such as
+    /// `/etc/os-release`, keeping all other lines. Refuses symbolic links.
+    SetVariables {
+        path: PathBuf,
+        values: Vec<(String, String)>,
+    },
     /// Waits until a file (e.g. a socket) exists.
     WaitForFile {
         path: PathBuf,
@@ -221,6 +227,15 @@ fn describe_action(action: &Action) -> String {
         Action::WaitForFile { path, timeout_secs } => {
             format!("# wait up to {timeout_secs}s for {}", quote_path(path))
         }
+        Action::SetVariables { path, values } => format!(
+            "# set in {}:\n{}",
+            quote_path(path),
+            values
+                .iter()
+                .map(|(k, v)| format!("#   {k}={}", quote_variable(v)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
         Action::Unmount(p) => format!("mountpoint -q {0} && umount -l {0}", quote_path(p)),
         Action::CopyBootFiles {
             rootfs,
@@ -392,9 +407,29 @@ impl Executor {
             Action::WriteFile { path, contents } => {
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent)
-                        .map_err(|e| format!("Can not create {}: {e} !", parent.display()))?;
+                        .map_err(|e| format!("Can not create {}: {e}", parent.display()))?;
+                }
+                // A symlink in the image could point to a file on the host.
+                if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+                    fs::remove_file(path)
+                        .map_err(|e| format!("Can not remove {}: {e}", path.display()))?;
                 }
                 fs::write(path, contents)
+                    .map_err(|e| format!("Can not write {}: {e}", path.display()))
+            }
+            Action::SetVariables { path, values } => {
+                let old = match fs::symlink_metadata(path) {
+                    Ok(meta) if meta.file_type().is_symlink() => {
+                        return Err(format!(
+                            "Refusing to modify {} because it is a symbolic link!",
+                            path.display()
+                        ));
+                    }
+                    Ok(_) => fs::read_to_string(path)
+                        .map_err(|e| format!("Can not read {}: {e} !", path.display()))?,
+                    Err(_) => String::new(),
+                };
+                fs::write(path, set_variables(&old, values))
                     .map_err(|e| format!("Can not write {}: {e} !", path.display()))
             }
             Action::WaitForFile { path, timeout_secs } => {
@@ -567,6 +602,49 @@ impl Executor {
             ))
         }
     }
+}
+
+/// Double-quotes a value for os-release style files.
+fn quote_variable(value: &str) -> String {
+    let mut out = String::from("\"");
+    for c in value.chars() {
+        if matches!(c, '\\' | '"' | '$' | '`') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
+}
+
+/// Replaces `KEY=...` lines (appending missing keys) and keeps everything else.
+fn set_variables(text: &str, values: &[(String, String)]) -> String {
+    let mut done = vec![false; values.len()];
+    let mut out = String::new();
+    for line in text.lines() {
+        let key = line.split_once('=').map(|(k, _)| k.trim());
+        match values.iter().position(|(k, _)| Some(k.as_str()) == key) {
+            Some(i) if done[i] => continue,
+            Some(i) => {
+                done[i] = true;
+                out.push_str(&format!(
+                    "{}={}\n",
+                    values[i].0,
+                    quote_variable(&values[i].1)
+                ));
+            }
+            None => {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+    }
+    for (i, (k, v)) in values.iter().enumerate() {
+        if !done[i] {
+            out.push_str(&format!("{k}={}\n", quote_variable(v)));
+        }
+    }
+    out
 }
 
 pub fn mksquashfs(rootfs: &Path, image: &Path, compression: &str) -> Cmd {
@@ -864,6 +942,20 @@ mod tests {
         assert_eq!(strip_ansi("\x1b[01;32mok\x1b[0m done"), "ok done");
         assert_eq!(strip_ansi("\x1b]0;title\x07a\x1b(Bb"), "ab");
         assert_eq!(strip_ansi("plain ü"), "plain ü");
+    }
+
+    #[test]
+    fn sets_os_release_variables() {
+        let old = "NAME=\"PisiLinux\"\nID=pisilinux\nVERSION=\"2.4.4\"\n# c\nVERSION=dup\n";
+        let values = vec![
+            ("NAME".to_string(), "My \"Pisi\" $X".to_string()),
+            ("VERSION".to_string(), "1.0".to_string()),
+            ("PRETTY_NAME".to_string(), "My Pisi 1.0".to_string()),
+        ];
+        assert_eq!(
+            set_variables(old, &values),
+            "NAME=\"My \\\"Pisi\\\" \\$X\"\nID=pisilinux\nVERSION=\"1.0\"\n# c\nPRETTY_NAME=\"My Pisi 1.0\"\n"
+        );
     }
 
     #[test]
