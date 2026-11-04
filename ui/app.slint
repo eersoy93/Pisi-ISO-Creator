@@ -44,10 +44,9 @@ component Field inherits HorizontalLayout {
 
 component ListEditor inherits Card {
     in-out property <string> text;
-    min-height: 150px;
     TextEdit {
         text <=> root.text;
-        min-height: 80px;
+        min-height: 100px;
         vertical-stretch: 1;
         font-size: 13px;
     }
@@ -331,17 +330,17 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: "Add to Packages";
+                                    text: "+ Packages";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("packages"); }
                                 }
                                 Button {
-                                    text: "Add to Excluded";
+                                    text: "+ Excluded";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("excluded"); }
                                 }
                                 Button {
-                                    text: "Install into Edited ISO";
+                                    text: "+ Edit ISO";
                                     enabled: root.selected-result >= 0;
                                     clicked => { root.add-selected("edit-install"); }
                                 }
