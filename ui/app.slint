@@ -87,7 +87,7 @@ component PrimaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
     min-width: label.preferred-width + 32px;
-    min-height: 40px;
+    height: 40px;
     border-radius: 20px;
     background: !root.enabled ? Theme.border
         : touch.pressed ? Theme.primary-hover.darker(0.1)
