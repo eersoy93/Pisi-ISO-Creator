@@ -13,7 +13,9 @@
 //! - the `ConfigFiles` directory becomes overlays (and `repo.conf` a
 //!   post-install script that sets the repository of the installed system).
 
-use crate::project::{COMPRESSIONS, Overlay, Project, Repository, is_valid_name, parse_list};
+use crate::project::{
+    COMPRESSIONS, Overlay, Project, Repository, is_valid_name, language_name, parse_list,
+};
 use quick_xml::events::Event;
 use quick_xml::{Reader, XmlVersion};
 use std::fs;
@@ -138,11 +140,27 @@ pub fn convert(xml: &[u8]) -> Result<Conversion, String> {
             doc.collections
         ));
     }
-    if !doc.languages.is_empty() || !doc.default_language.is_empty() {
+    // Pisiman uses locale names (tr_TR), mudur language codes (tr).
+    let mut unsupported = Vec::new();
+    let default_language = doc.default_language.trim();
+    if !default_language.is_empty() {
+        match language_code(default_language) {
+            Some(code) => project.default_language = code,
+            None => unsupported.push(default_language.to_string()),
+        }
+    }
+    for language in &doc.languages {
+        match language_code(language) {
+            Some(code) if !project.languages.contains(&code) => project.languages.push(code),
+            Some(_) => {}
+            None if !unsupported.contains(language) => unsupported.push(language.clone()),
+            None => {}
+        }
+    }
+    if !unsupported.is_empty() {
         warnings.push(format!(
-            "Language selection (default '{}': {}) is not supported and was ignored.",
-            doc.default_language,
-            doc.languages.join(", ")
+            "Languages not supported by mudur were left out: {}.",
+            unsupported.join(", ")
         ));
     }
     let kind = doc.kind.trim();
@@ -453,6 +471,16 @@ fn parse(xml: &[u8]) -> Result<PisimanDoc, String> {
     Ok(doc)
 }
 
+/// Maps a locale name such as `tr_TR`, `pt_BR` or `de_DE.UTF-8` to a mudur
+/// language code.
+fn language_code(locale: &str) -> Option<String> {
+    let locale = locale.trim().split(['.', '@']).next().unwrap_or_default();
+    [locale, locale.split('_').next().unwrap_or_default()]
+        .into_iter()
+        .find(|c| language_name(c).is_some())
+        .map(str::to_string)
+}
+
 /// Removes duplicates and keeps the first occurrence order.
 fn unique<'a>(items: impl Iterator<Item = &'a String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -527,6 +555,8 @@ mod tests {
     </RootImagePackages>
     <LanguageSelection default_language="tr_TR">
         <Language>tr_TR</Language>
+        <Language>hr_HR</Language>
+        <Language>pt_BR</Language>
         <Language>en_US</Language>
     </LanguageSelection>
 </PisiManProject>
@@ -565,7 +595,9 @@ mod tests {
         )));
         let w = c.warnings.join("\n");
         assert!(w.contains("mkinitcpio"));
-        assert!(w.contains("tr_TR"));
+        assert_eq!(p.default_language, "tr");
+        assert_eq!(p.languages, vec!["tr", "pt_BR", "en"]);
+        assert!(w.contains("left out: hr_HR"), "{w}");
         assert!(w.contains("was not found"));
         assert!(w.contains("merged"));
     }
@@ -648,6 +680,16 @@ mod tests {
     fn rejects_other_xml() {
         assert!(convert(b"<PISI><Package/></PISI>").is_err());
         assert!(convert(b"<PisiManProject").is_err());
+    }
+
+    #[test]
+    fn maps_locales_to_mudur_languages() {
+        assert_eq!(language_code("tr_TR"), Some("tr".into()));
+        assert_eq!(language_code("pt_BR"), Some("pt_BR".into()));
+        assert_eq!(language_code("de_DE.UTF-8"), Some("de".into()));
+        assert_eq!(language_code("en"), Some("en".into()));
+        assert_eq!(language_code("hr_HR"), None);
+        assert_eq!(language_code(""), None);
     }
 
     #[test]

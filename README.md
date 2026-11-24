@@ -10,14 +10,16 @@ feature is also available from the command line.
   1. installs PiSi components and packages from the configured PiSi
      repositories into a fresh root file system (`pisi --destdir=…`),
   2. runs the COMAR scripts inside a chroot (`pisi configure-pending`),
-  3. sets the hostname and the name/version in `/etc/os-release`, creates a
+  3. sets the hostname, the name/version in `/etc/os-release` and the
+     default language (`/etc/conf.d/mudur`), creates a
      live user (optionally with a password), copies overlay files into the
      image, configures automatic login (SDDM, LightDM, LXDM or MDM) and runs
      an optional post-install script,
   4. generates a live initramfs with `mkinitcpio` and its own `pisilive`
      hook (finds `live/pisi.sfs` and mounts it with a tmpfs overlay),
   5. compresses the root file system to `live/pisi.sfs` with SquashFS,
-  6. writes a GRUB menu and creates the ISO with `grub2-mkrescue`.
+  6. writes a GRUB menu (optionally with a language submenu) and creates the
+     ISO with `grub2-mkrescue`.
 - **ISO editor** – modifies an existing (Pisi based) live ISO: extracts it,
   unpacks the root SquashFS (found automatically), adds repositories,
   upgrades / installs / removes PiSi packages, runs a post-install script,
@@ -101,6 +103,8 @@ output_iso = "pisi-live.iso"
 squashfs_compression = "xz"         # xz, zstd, gzip, lzo, lz4
 kernel_cmdline = "quiet splash"
 live_initramfs = true               # mkinitcpio + "pisilive" hook
+default_language = ""               # mudur language code, e.g. "tr"; empty = image default
+languages = []                      # boot menu languages, e.g. ["tr", "en", "de"]
 display_manager = ""                # automatic live login: sddm, lightdm, lxdm, mdm
 autologin_session = ""              # e.g. plasma, xfce (LXDM: a command); empty = first installed session
 post_install_script = ""            # executed with /bin/sh -e in the chroot
@@ -115,6 +119,13 @@ url = "https://stable2.pisilinux.org/pisi-index.xml.xz"
 # source = "/home/me/live-config/calamares"   # on the host
 # target = "/etc/calamares"                   # absolute directory in the image
 ```
+
+Languages are the ones supported by mudur, the Pisi init system: `ca`, `de`,
+`en`, `es`, `fr`, `hu`, `it`, `nl`, `pl`, `pt_BR`, `ru`, `sv`, `tr`. mudur
+derives the locale (`/etc/env.d/03locale`), console keymap and font from the
+language at boot. If `languages` is not empty the GRUB menu gets a
+*Language* submenu with one entry per language (and the default language),
+which boots with `mudur=language:<code>`.
 
 Overlay files are owned by root in the image; the home directory of the live
 user is given to the live user afterwards. Files are staged inside the image
@@ -147,6 +158,7 @@ the command line.
 | `<SelectedComponent>`                      | `components`                              |
 | `<SelectedPackage>`, `<PluginPackage>`     | `packages` (`kernel` and `mkinitcpio` are added if missing) |
 | `<Package>` (resolved list)                | only used when nothing is selected        |
+| `<LanguageSelection>`                      | `default_language`, `languages` (`tr_TR` → `tr`, `pt_BR` stays; languages mudur does not support are left out with a warning) |
 | `<ConfigFiles>` directory                  | `overlays` and `post_install_script`, see below |
 
 `<ConfigFiles>` is converted like Pisiman uses it:
@@ -168,8 +180,7 @@ are used, otherwise the standard layout is assumed. Pisiman's boot files
 because Pisi ISO Creator writes its own GRUB menu and live initramfs.
 
 Root, desktop and live CD image selections and package collections are merged
-into one live image. The language selection has no equivalent; it is reported
-as a warning together with any validation problems.
+into one live image. Validation problems are reported as warnings.
 
 ## Development
 

@@ -5,8 +5,8 @@ use crate::pipeline::{build_plan, edit_plan};
 use crate::pisi::{self, RepoIndex};
 use crate::pisiman;
 use crate::project::{
-    DISPLAY_MANAGERS, EditJob, Project, format_list, format_overlays, format_repositories,
-    parse_list, parse_overlays, parse_repositories,
+    DISPLAY_MANAGERS, EditJob, LANGUAGES, Project, format_list, format_overlays,
+    format_repositories, parse_list, parse_overlays, parse_repositories,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, StandardListViewItem, VecModel};
 use std::cell::RefCell;
@@ -46,6 +46,15 @@ pub fn run() -> Result<(), slint::PlatformError> {
         cancel: Arc::new(AtomicBool::new(false)),
     }));
 
+    let language_names: Vec<SharedString> = std::iter::once("Image default".to_string())
+        .chain(
+            LANGUAGES
+                .iter()
+                .map(|(code, name)| format!("{name} ({code})")),
+        )
+        .map(SharedString::from)
+        .collect();
+    ui.set_language_names(ModelRc::new(VecModel::from(language_names)));
     project_to_ui(&ui, &Project::default());
     edit_job_to_ui(&ui, &EditJob::default());
     if let Some(repo) = Project::default().repositories.first() {
@@ -402,6 +411,13 @@ fn project_to_ui(ui: &AppWindow, p: &Project) {
             .unwrap_or(0) as i32,
     );
     ui.set_autologin_session(p.autologin_session.clone().into());
+    ui.set_default_language(
+        LANGUAGES
+            .iter()
+            .position(|(c, _)| *c == p.default_language)
+            .map_or(0, |i| i as i32 + 1),
+    );
+    ui.set_boot_languages(p.languages.join(" ").into());
     ui.set_overlays(format_overlays(&p.overlays).into());
     ui.set_repositories(format_repositories(&p.repositories).into());
     ui.set_components(format_list(&p.components).into());
@@ -432,6 +448,12 @@ fn ui_to_project(ui: &AppWindow) -> Result<Project, String> {
             .unwrap_or(&"")
             .to_string(),
         autologin_session: ui.get_autologin_session().trim().to_string(),
+        default_language: usize::try_from(ui.get_default_language() - 1)
+            .ok()
+            .and_then(|i| LANGUAGES.get(i))
+            .map(|(c, _)| c.to_string())
+            .unwrap_or_default(),
+        languages: parse_list(&ui.get_boot_languages()),
         overlays: parse_overlays(&ui.get_overlays())?,
         post_install_script: ui.get_post_install_script().to_string(),
     })

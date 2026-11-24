@@ -3,7 +3,7 @@
 
 use crate::command::{Action, Cmd, Plan, Step, mksquashfs};
 use crate::pisi::{Pisi, chroot};
-use crate::project::{EditJob, Project};
+use crate::project::{EditJob, Project, language_name};
 use std::path::{Path, PathBuf};
 
 const LIVE_INITRD: &str = "/boot/initrd.live";
@@ -108,6 +108,27 @@ pub fn build_plan(project: &Project) -> Plan {
             contents: format!("{pretty_name}\n"),
         },
     ));
+    if !project.default_language.is_empty() {
+        let conf_d = rootfs.join("etc/conf.d");
+        steps.push(Step::new(
+            "Create /etc/conf.d",
+            Action::CreateMountPoint {
+                root: rootfs.clone(),
+                path: conf_d.clone(),
+            },
+        ));
+        steps.push(Step::new(
+            format!(
+                "Set default language to {} ({})",
+                language_name(&project.default_language).unwrap_or_default(),
+                project.default_language
+            ),
+            Action::SetVariables {
+                path: conf_d.join("mudur"),
+                values: vec![("language".into(), project.default_language.clone())],
+            },
+        ));
+    }
     if !project.live_user.is_empty() {
         steps.push(Step::run(
             format!("Create live user '{}'", project.live_user),
@@ -734,13 +755,61 @@ pub fn grub_config(project: &Project) -> String {
          insmod gfxterm\n\
          search --no-floppy --set=root --file /{LIVE_SQUASHFS}\n\n"
     );
+    if !boot_languages(project).is_empty() {
+        // Language names need a Unicode font (added by grub2-mkrescue).
+        cfg.push_str(
+            "if loadfont unicode; then\n    set gfxmode=auto\n    terminal_output gfxterm\nfi\n\n",
+        );
+    }
     cfg.push_str(&entry(format!("{title} (Live)"), ""));
     cfg.push_str(&entry(
         format!("{title} (Live, safe graphics)"),
         " nomodeset",
     ));
+    let languages = boot_languages(project);
+    if !languages.is_empty() {
+        cfg.push_str("submenu 'Language' {\n");
+        for code in &languages {
+            let name = language_name(code).unwrap_or(code);
+            cfg.push_str(&indent(&entry(
+                format!("{name} ({code})"),
+                &format!(" mudur=language:{code}"),
+            )));
+        }
+        cfg.push_str("}\n\n");
+    }
     cfg.push_str("menuentry 'Reboot' {\n    reboot\n}\n\nmenuentry 'Power Off' {\n    halt\n}\n");
     cfg
+}
+
+/// Languages of the boot menu: the selected ones and the default language,
+/// sorted by code (like Pisiman). Unknown codes are left out.
+fn boot_languages(project: &Project) -> Vec<String> {
+    if project.languages.is_empty() {
+        return vec![];
+    }
+    let mut languages: Vec<String> = project
+        .languages
+        .iter()
+        .chain(std::iter::once(&project.default_language))
+        .filter(|c| language_name(c).is_some())
+        .cloned()
+        .collect();
+    languages.sort();
+    languages.dedup();
+    languages
+}
+
+fn indent(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        if !line.is_empty() {
+            out.push_str("    ");
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -892,6 +961,31 @@ mod tests {
         assert!(cfg.contains("--file /live/pisi.sfs"));
         project.live_initramfs = false;
         assert!(!grub_config(&project).contains("boot=live"));
+        assert!(!grub_config(&project).contains("submenu"));
+    }
+
+    #[test]
+    fn languages_in_grub_and_mudur_config() {
+        let project = Project {
+            work_dir: "/w".into(),
+            default_language: "tr".into(),
+            languages: vec!["en".into(), "de".into()],
+            ..Default::default()
+        };
+        let cfg = grub_config(&project);
+        assert!(cfg.contains("loadfont unicode"));
+        let menu = &cfg[cfg.find("submenu 'Language'").unwrap()..];
+        let de = menu.find("'Deutsch (de)'").unwrap();
+        let en = menu.find("'English (en)'").unwrap();
+        let tr = menu.find("'Türkçe (tr)'").unwrap();
+        assert!(de < en && en < tr);
+        assert!(menu.contains("quiet splash mudur=language:tr\n"));
+        assert!(build_plan(&project).steps.iter().any(|s| matches!(
+            &s.action,
+            Action::SetVariables { path, values }
+                if path == Path::new("/w/rootfs/etc/conf.d/mudur")
+                    && values == &[("language".to_string(), "tr".to_string())]
+        )));
     }
 
     #[test]

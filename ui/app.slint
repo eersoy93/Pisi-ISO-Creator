@@ -197,6 +197,10 @@ export component AppWindow inherits Window {
     /// Index into DISPLAY_MANAGERS (0 = no automatic login).
     in-out property <int> display-manager: 0;
     in-out property <string> autologin-session;
+    /// 0 = image default, otherwise index into LANGUAGES + 1.
+    in-out property <int> default-language: 0;
+    in property <[string]> language-names: ["Image default"];
+    in-out property <string> boot-languages;
     in-out property <string> overlays;
     // ---- Packages ----
     in-out property <string> repositories;
@@ -370,7 +374,21 @@ export component AppWindow inherits Window {
                                 }
                                 Card {
                                     title: "Live Session";
-                                    subtitle: "Automatic login of the live user by the display manager.";
+                                    subtitle: "System language and automatic login of the live user.";
+                                    Field {
+                                        label: "Default language:";
+                                        ComboBox {
+                                            model: root.language-names;
+                                            current-index <=> root.default-language;
+                                        }
+                                    }
+                                    Field {
+                                        label: "Boot menu languages:";
+                                        LineEdit {
+                                            text <=> root.boot-languages;
+                                            placeholder-text: "codes, e.g. tr en de; empty = no language menu";
+                                        }
+                                    }
                                     Field {
                                         label: "Display manager:";
                                         ComboBox {

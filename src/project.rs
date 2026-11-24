@@ -14,6 +14,29 @@ pub const COMPRESSIONS: &[&str] = &["xz", "zstd", "gzip", "lzo", "lz4"];
 /// user. The empty string means "do not configure".
 pub const DISPLAY_MANAGERS: &[&str] = &["", "sddm", "lightdm", "lxdm", "mdm"];
 
+/// Languages supported by mudur, the Pisi init system (`language` in
+/// `/etc/conf.d/mudur`, `mudur=language:<code>` on the kernel command line),
+/// with their names for the boot menu.
+pub const LANGUAGES: &[(&str, &str)] = &[
+    ("ca", "Català"),
+    ("de", "Deutsch"),
+    ("en", "English"),
+    ("es", "Español"),
+    ("fr", "Français"),
+    ("hu", "Magyar"),
+    ("it", "Italiano"),
+    ("nl", "Nederlands"),
+    ("pl", "Polski"),
+    ("pt_BR", "Português (Brasil)"),
+    ("ru", "Русский"),
+    ("sv", "Svenska"),
+    ("tr", "Türkçe"),
+];
+
+pub fn language_name(code: &str) -> Option<&'static str> {
+    LANGUAGES.iter().find(|(c, _)| *c == code).map(|(_, n)| *n)
+}
+
 /// A file or directory copied from the host into the root file system.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Overlay {
@@ -83,6 +106,11 @@ pub struct Project {
     /// Generate a live capable initramfs with mkinitcpio and the `pisilive`
     /// hook (image at `/live/pisi.sfs`).
     pub live_initramfs: bool,
+    /// Default system language (mudur code such as `tr`, see [`LANGUAGES`]).
+    /// Empty = keep the default of the image.
+    pub default_language: String,
+    /// Languages offered in the boot menu.
+    pub languages: Vec<String>,
     /// Display manager (`sddm`, `lightdm`, `lxdm`, `mdm`) configured to log in
     /// the live user automatically. Empty = no automatic login.
     pub display_manager: String,
@@ -117,6 +145,8 @@ impl Default for Project {
             squashfs_compression: "xz".into(),
             kernel_cmdline: "quiet splash".into(),
             live_initramfs: true,
+            default_language: String::new(),
+            languages: vec![],
             display_manager: String::new(),
             autologin_session: String::new(),
             overlays: vec![],
@@ -178,6 +208,21 @@ impl Project {
         check_compression(&self.squashfs_compression, &mut errors);
         if has_control_chars(&self.kernel_cmdline) {
             errors.push("Kernel command line must be a single line!".into());
+        }
+        for code in std::iter::once(&self.default_language)
+            .filter(|c| !c.is_empty())
+            .chain(&self.languages)
+        {
+            if language_name(code).is_none() {
+                errors.push(format!(
+                    "Unsupported language '{code}'! Supported: {}",
+                    LANGUAGES
+                        .iter()
+                        .map(|(c, _)| *c)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
         }
         if !DISPLAY_MANAGERS.contains(&self.display_manager.as_str()) {
             errors.push(format!(
@@ -566,6 +611,24 @@ mod tests {
         assert!(errors.contains("session"));
         p.display_manager = "gdm".into();
         assert!(p.validate().iter().any(|e| e.contains("gdm")));
+    }
+
+    #[test]
+    fn language_validation() {
+        let mut p = Project {
+            default_language: "tr".into(),
+            languages: vec!["en".into(), "pt_BR".into()],
+            ..Default::default()
+        };
+        assert!(p.validate().is_empty(), "{:?}", p.validate());
+        p.languages.push("hr".into());
+        p.default_language = "tr_TR".into();
+        let errors = p.validate().join("\n");
+        assert!(
+            errors.contains("'hr'") && errors.contains("'tr_TR'"),
+            "{errors}"
+        );
+        assert_eq!(language_name("tr"), Some("Türkçe"));
     }
 
     #[test]
