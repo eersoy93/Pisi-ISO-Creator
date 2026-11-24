@@ -5,7 +5,8 @@ use crate::pipeline::{build_plan, edit_plan};
 use crate::pisi::{self, RepoIndex};
 use crate::pisiman;
 use crate::project::{
-    EditJob, Project, format_list, format_repositories, parse_list, parse_repositories,
+    DISPLAY_MANAGERS, EditJob, Project, format_list, format_overlays, format_repositories,
+    parse_list, parse_overlays, parse_repositories,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, StandardListViewItem, VecModel};
 use std::cell::RefCell;
@@ -394,6 +395,14 @@ fn project_to_ui(ui: &AppWindow, p: &Project) {
     ui.set_kernel_cmdline(p.kernel_cmdline.clone().into());
     ui.set_live_initramfs(p.live_initramfs);
     ui.set_post_install_script(p.post_install_script.clone().into());
+    ui.set_display_manager(
+        DISPLAY_MANAGERS
+            .iter()
+            .position(|d| *d == p.display_manager)
+            .unwrap_or(0) as i32,
+    );
+    ui.set_autologin_session(p.autologin_session.clone().into());
+    ui.set_overlays(format_overlays(&p.overlays).into());
     ui.set_repositories(format_repositories(&p.repositories).into());
     ui.set_components(format_list(&p.components).into());
     ui.set_packages(format_list(&p.packages).into());
@@ -417,6 +426,13 @@ fn ui_to_project(ui: &AppWindow) -> Result<Project, String> {
         squashfs_compression: ui.get_compression().to_string(),
         kernel_cmdline: ui.get_kernel_cmdline().trim().to_string(),
         live_initramfs: ui.get_live_initramfs(),
+        display_manager: usize::try_from(ui.get_display_manager())
+            .ok()
+            .and_then(|i| DISPLAY_MANAGERS.get(i))
+            .unwrap_or(&"")
+            .to_string(),
+        autologin_session: ui.get_autologin_session().trim().to_string(),
+        overlays: parse_overlays(&ui.get_overlays())?,
         post_install_script: ui.get_post_install_script().to_string(),
     })
 }

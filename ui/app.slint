@@ -194,6 +194,10 @@ export component AppWindow inherits Window {
     in-out property <string> kernel-cmdline;
     in-out property <bool> live-initramfs: true;
     in-out property <string> post-install-script;
+    /// Index into DISPLAY_MANAGERS (0 = no automatic login).
+    in-out property <int> display-manager: 0;
+    in-out property <string> autologin-session;
+    in-out property <string> overlays;
     // ---- Packages ----
     in-out property <string> repositories;
     in-out property <string> components;
@@ -363,6 +367,29 @@ export component AppWindow inherits Window {
                                             checked <=> root.live-initramfs;
                                         }
                                     }
+                                }
+                                Card {
+                                    title: "Live Session";
+                                    subtitle: "Automatic login of the live user by the display manager.";
+                                    Field {
+                                        label: "Display manager:";
+                                        ComboBox {
+                                            model: ["None", "SDDM", "LightDM", "LXDM", "MDM"];
+                                            current-index <=> root.display-manager;
+                                        }
+                                    }
+                                    Field {
+                                        label: "Session:";
+                                        LineEdit {
+                                            text <=> root.autologin-session;
+                                            placeholder-text: "e.g. plasma, xfce; empty = first installed session";
+                                        }
+                                    }
+                                }
+                                ListEditor {
+                                    title: "Overlays";
+                                    subtitle: "Copied into the image: one '<host file or directory> <target directory>' per line.";
+                                    text <=> root.overlays;
                                 }
                                 ListEditor {
                                     title: "Post-install script";

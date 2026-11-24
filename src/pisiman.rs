@@ -7,8 +7,13 @@
 //! into root / desktop / live CD images or package collections. All selected
 //! components and packages are merged into a single live image; settings
 //! without an equivalent are reported as warnings.
+//!
+//! - `type` (`Sddm`, `Lightdm`, `Lxdm`, `Mdm`) becomes `display_manager`,
+//! - `PluginPackage` is added to the packages,
+//! - the `ConfigFiles` directory becomes overlays (and `repo.conf` a
+//!   post-install script that sets the repository of the installed system).
 
-use crate::project::{COMPRESSIONS, Project, Repository, is_valid_name};
+use crate::project::{COMPRESSIONS, Overlay, Project, Repository, is_valid_name, parse_list};
 use quick_xml::events::Event;
 use quick_xml::{Reader, XmlVersion};
 use std::fs;
@@ -99,6 +104,11 @@ pub fn convert(xml: &[u8]) -> Result<Conversion, String> {
                 .into(),
         );
     }
+    for package in parse_list(&doc.plugin_package) {
+        if !project.packages.contains(&package) {
+            project.packages.push(package);
+        }
+    }
     let added: Vec<&str> = REQUIRED_PACKAGES
         .iter()
         .copied()
@@ -135,26 +145,165 @@ pub fn convert(xml: &[u8]) -> Result<Conversion, String> {
             doc.languages.join(", ")
         ));
     }
-    for (tag, value) in [
-        ("ConfigFiles", &doc.config_files),
-        ("PluginPackage", &doc.plugin_package),
-    ] {
-        if !value.trim().is_empty() {
-            warnings.push(format!(
-                "<{tag}> '{}' is not supported and was ignored.",
-                value.trim()
-            ));
-        }
-    }
     let kind = doc.kind.trim();
-    if !kind.is_empty() && kind != "None" {
-        warnings.push(format!(
+    match DISPLAY_MANAGER_TYPES
+        .iter()
+        .find(|(t, _)| t.eq_ignore_ascii_case(kind))
+    {
+        Some((_, dm)) => project.display_manager = dm.to_string(),
+        None if kind.is_empty() || kind == "None" => {}
+        None => warnings.push(format!(
             "Project type '{kind}' is not supported and was ignored."
-        ));
+        )),
+    }
+
+    let config_dir = doc.config_files.trim();
+    if !config_dir.is_empty() {
+        apply_config_files(&mut project, Path::new(config_dir), &mut warnings);
     }
 
     warnings.extend(project.validate());
     Ok(Conversion { project, warnings })
+}
+
+/// Pisiman project types (live display manager) and their equivalents.
+const DISPLAY_MANAGER_TYPES: &[(&str, &str)] = &[
+    ("Sddm", "sddm"),
+    ("Lightdm", "lightdm"),
+    ("Lxdm", "lxdm"),
+    ("Mdm", "mdm"),
+];
+
+/// Pisiman configuration files copied into the image: (path in the
+/// configuration directory, target directory).
+const CONFIG_OVERLAYS: &[(&str, &str)] = &[
+    ("default-settings/etc", "/etc"),
+    ("default-settings/autostart", "/etc/skel/.config/autostart"),
+    ("calamares", "/etc/calamares"),
+    ("live/sudoers", "/etc/sudoers.d"),
+    ("göruntu", "/usr/share/wallpapers/Maia/contents"),
+];
+
+/// Boot files of Pisiman's isolinux / miso / systemd-boot setup. Pisi ISO
+/// Creator writes its own GRUB menu and initramfs hook instead.
+const CONFIG_BOOT_FILES: &[&str] = &[
+    "autorun",
+    "efi",
+    "efi_grub",
+    "initcpio",
+    "isolinux",
+    "isomounts",
+    "linux.preset",
+    "mkinitcpio-live.conf",
+];
+
+/// Converts a Pisiman `ConfigFiles` directory. When the directory exists
+/// only the present parts are used; otherwise the standard layout is assumed.
+fn apply_config_files(project: &mut Project, dir: &Path, warnings: &mut Vec<String>) {
+    let exists = dir.is_dir();
+    if !exists {
+        warnings.push(format!(
+            "ConfigFiles directory {} was not found; the standard Pisiman layout was \
+             assumed, check the overlays.",
+            dir.display()
+        ));
+    }
+    let present = |rel: &str| !exists || dir.join(rel).exists();
+
+    for (rel, target) in CONFIG_OVERLAYS {
+        if present(rel) {
+            project.overlays.push(Overlay::new(dir.join(rel), *target));
+        }
+    }
+
+    // live/<desktop>/.config and live/<desktop>/autostart go to the home
+    // directory of the live user.
+    let mut desktops: Vec<String> = if exists {
+        fs::read_dir(dir.join("live"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n != "sudoers")
+            .collect()
+    } else {
+        vec!["kde".into()]
+    };
+    desktops.sort();
+    if !desktops.is_empty() && project.live_user.is_empty() {
+        warnings.push("Live user settings were skipped because there is no live user.".into());
+    } else {
+        let home = Path::new("/home").join(&project.live_user);
+        for desktop in &desktops {
+            for (rel, target) in [
+                (".config", home.join(".config")),
+                ("autostart", home.join(".config/autostart")),
+            ] {
+                let rel = format!("live/{desktop}/{rel}");
+                if present(&rel) {
+                    project.overlays.push(Overlay::new(dir.join(rel), target));
+                }
+            }
+        }
+    }
+
+    // repo.conf: repository of the installed system, replacing the
+    // (often local) repositories the image was built from.
+    match fs::read_to_string(dir.join("repo.conf")) {
+        Ok(text) => {
+            let url = text.trim();
+            if crate::project::is_valid_url(url) {
+                let mut script = String::from("# Repository from Pisiman repo.conf\n");
+                for repo in &project.repositories {
+                    script.push_str(&format!("pisi remove-repo {}\n", repo.name));
+                }
+                script.push_str(&format!("pisi add-repo --no-fetch pisi {url}\n"));
+                project.post_install_script = script + &project.post_install_script;
+            } else {
+                warnings.push(format!("Invalid repository URL '{url}' in repo.conf."));
+            }
+        }
+        Err(_) => warnings.push(format!(
+            "{} could not be read; the build repositories stay in the image.",
+            dir.join("repo.conf").display()
+        )),
+    }
+
+    let boot: Vec<&str> = CONFIG_BOOT_FILES
+        .iter()
+        .copied()
+        .filter(|f| exists && dir.join(f).exists())
+        .collect();
+    if !boot.is_empty() {
+        warnings.push(format!(
+            "Boot files from ConfigFiles ({}) were not used; Pisi ISO Creator generates \
+             its own GRUB menu and live initramfs.",
+            boot.join(", ")
+        ));
+    }
+    if exists {
+        let known: Vec<&str> = CONFIG_OVERLAYS
+            .iter()
+            .map(|(rel, _)| rel.split('/').next().unwrap_or(rel))
+            .chain(CONFIG_BOOT_FILES.iter().copied())
+            .chain(["live", "repo.conf"])
+            .collect();
+        let mut unknown: Vec<String> = fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| !known.contains(&n.as_str()))
+            .collect();
+        unknown.sort();
+        if !unknown.is_empty() {
+            warnings.push(format!(
+                "Unknown entries in ConfigFiles were not used: {}.",
+                unknown.join(", ")
+            ));
+        }
+    }
 }
 
 /// A `PackageSelection`, `RootImagePackages`, `DesktopImagePackages` or
@@ -403,12 +552,82 @@ mod tests {
         assert_eq!(p.components, vec!["system.base", "x11.server"]);
         assert_eq!(p.packages, vec!["kernel", "firefox", "grub2", "mkinitcpio"]);
         assert!(p.validate().is_empty(), "{:?}", p.validate());
+        assert_eq!(p.display_manager, "sddm");
+        assert_eq!(p.packages.last().unwrap(), "mkinitcpio");
+        // The configuration directory does not exist here: standard layout.
+        assert!(p.overlays.contains(&Overlay::new(
+            "/home/user/pisiman/config/calamares",
+            "/etc/calamares"
+        )));
+        assert!(p.overlays.contains(&Overlay::new(
+            "/home/user/pisiman/config/live/kde/.config",
+            "/home/pisi/.config"
+        )));
         let w = c.warnings.join("\n");
         assert!(w.contains("mkinitcpio"));
         assert!(w.contains("tr_TR"));
-        assert!(w.contains("ConfigFiles"));
-        assert!(w.contains("Sddm"));
+        assert!(w.contains("was not found"));
         assert!(w.contains("merged"));
+    }
+
+    #[test]
+    fn converts_existing_config_dir_and_plugin_package() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config");
+        for d in [
+            "calamares/modules",
+            "live/sudoers",
+            "live/xfce/.config",
+            "default-settings/etc",
+            "initcpio/hooks",
+            "efi",
+            "extra",
+        ] {
+            fs::create_dir_all(config.join(d)).unwrap();
+        }
+        fs::write(
+            config.join("repo.conf"),
+            "https://example.org/pisi-index.xml.xz\n",
+        )
+        .unwrap();
+        let xml = format!(
+            r#"<PisiManProject type="Lxdm" compression="xz">
+            <Title>Xfce</Title>
+            <ConfigFiles>{}</ConfigFiles>
+            <PluginPackage>pisi-branding</PluginPackage>
+            <PackageSelection repo_uri="file:///repo/pisi-index.xml.xz">
+                <SelectedComponent>system.base</SelectedComponent>
+            </PackageSelection>
+        </PisiManProject>"#,
+            config.display()
+        );
+        let c = convert(xml.as_bytes()).unwrap();
+        let p = &c.project;
+        assert_eq!(p.display_manager, "lxdm");
+        assert!(p.packages.contains(&"pisi-branding".to_string()));
+        let targets: Vec<_> = p
+            .overlays
+            .iter()
+            .map(|o| o.target.display().to_string())
+            .collect();
+        assert_eq!(
+            targets,
+            vec![
+                "/etc",
+                "/etc/calamares",
+                "/etc/sudoers.d",
+                "/home/pisi/.config"
+            ]
+        );
+        assert_eq!(
+            p.post_install_script,
+            "# Repository from Pisiman repo.conf\npisi remove-repo pisi\n\
+             pisi add-repo --no-fetch pisi https://example.org/pisi-index.xml.xz\n"
+        );
+        let w = c.warnings.join("\n");
+        assert!(w.contains("efi, initcpio"), "{w}");
+        assert!(w.contains("not used: extra"), "{w}");
+        assert!(p.validate().is_empty(), "{:?}", p.validate());
     }
 
     #[test]

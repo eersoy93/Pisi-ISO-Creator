@@ -10,6 +10,28 @@ use std::path::{Path, PathBuf};
 /// SquashFS compressors supported by `mksquashfs`.
 pub const COMPRESSIONS: &[&str] = &["xz", "zstd", "gzip", "lzo", "lz4"];
 
+/// Display managers whose automatic login can be configured for the live
+/// user. The empty string means "do not configure".
+pub const DISPLAY_MANAGERS: &[&str] = &["", "sddm", "lightdm", "lxdm", "mdm"];
+
+/// A file or directory copied from the host into the root file system.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Overlay {
+    /// File or directory on the host. The contents of a directory are copied.
+    pub source: PathBuf,
+    /// Absolute target directory inside the image.
+    pub target: PathBuf,
+}
+
+impl Overlay {
+    pub fn new(source: impl Into<PathBuf>, target: impl Into<PathBuf>) -> Self {
+        Self {
+            source: source.into(),
+            target: target.into(),
+        }
+    }
+}
+
 /// A PiSi package repository (`pisi add-repo <name> <url>`).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Repository {
@@ -61,6 +83,15 @@ pub struct Project {
     /// Generate a live capable initramfs with mkinitcpio and the `pisilive`
     /// hook (image at `/live/pisi.sfs`).
     pub live_initramfs: bool,
+    /// Display manager (`sddm`, `lightdm`, `lxdm`, `mdm`) configured to log in
+    /// the live user automatically. Empty = no automatic login.
+    pub display_manager: String,
+    /// Session for the automatic login (e.g. `plasma`, `xfce`; a command for
+    /// LXDM). Empty = first installed X11 / Wayland session.
+    pub autologin_session: String,
+    /// Files and directories copied into the image after the live user is
+    /// created, before the post-install script runs.
+    pub overlays: Vec<Overlay>,
     /// Shell script executed inside the chroot after the packages are configured.
     pub post_install_script: String,
 }
@@ -86,6 +117,9 @@ impl Default for Project {
             squashfs_compression: "xz".into(),
             kernel_cmdline: "quiet splash".into(),
             live_initramfs: true,
+            display_manager: String::new(),
+            autologin_session: String::new(),
+            overlays: vec![],
             post_install_script: String::new(),
         }
     }
@@ -145,7 +179,48 @@ impl Project {
         if has_control_chars(&self.kernel_cmdline) {
             errors.push("Kernel command line must be a single line!".into());
         }
+        if !DISPLAY_MANAGERS.contains(&self.display_manager.as_str()) {
+            errors.push(format!(
+                "Unsupported display manager '{}'!",
+                self.display_manager
+            ));
+        } else if !self.display_manager.is_empty() && self.live_user.is_empty() {
+            errors.push("Automatic login needs a live user!".into());
+        }
+        if !self
+            .autologin_session
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+' | '/'))
+            || self.autologin_session.starts_with('-')
+        {
+            errors.push(format!(
+                "Invalid automatic login session '{}'!",
+                self.autologin_session
+            ));
+        }
+        check_overlays(&self.overlays, &mut errors);
         errors
+    }
+}
+
+fn check_overlays(overlays: &[Overlay], errors: &mut Vec<String>) {
+    use std::path::Component;
+    for o in overlays {
+        let source = o.source.to_string_lossy();
+        let target = o.target.to_string_lossy();
+        if source.trim().is_empty() || has_control_chars(&source) {
+            errors.push(format!("Invalid overlay source '{source}'!"));
+        }
+        if !o.target.is_absolute()
+            || has_control_chars(&target)
+            || o.target
+                .components()
+                .any(|c| matches!(c, Component::ParentDir | Component::CurDir))
+        {
+            errors.push(format!(
+                "Overlay target '{target}' must be an absolute path without '..'!"
+            ));
+        }
     }
 }
 
@@ -354,6 +429,38 @@ pub fn parse_repositories(text: &str) -> Result<Vec<Repository>, String> {
     Ok(repos)
 }
 
+/// Parses `<source> <target>` lines into overlays, ignoring `#` comments.
+/// The target is the last word, so the source may contain spaces.
+pub fn parse_overlays(text: &str) -> Result<Vec<Overlay>, String> {
+    let mut overlays = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        match line.rsplit_once(char::is_whitespace) {
+            Some((source, target)) if !source.trim().is_empty() => {
+                overlays.push(Overlay::new(source.trim(), target))
+            }
+            _ => {
+                return Err(format!(
+                    "Overlay line {} must have the form '<source> <target directory>'!",
+                    n + 1
+                ));
+            }
+        }
+    }
+    Ok(overlays)
+}
+
+pub fn format_overlays(overlays: &[Overlay]) -> String {
+    overlays
+        .iter()
+        .map(|o| format!("{} {}", o.source.display(), o.target.display()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn format_repositories(repos: &[Repository]) -> String {
     repos
         .iter()
@@ -424,6 +531,41 @@ mod tests {
             format_repositories(&repos),
             "pisi https://x/pisi-index.xml.xz"
         );
+    }
+
+    #[test]
+    fn overlays_and_autologin() {
+        let overlays = parse_overlays("# c\n/my config/etc /etc\nfiles /usr/share/x\n").unwrap();
+        assert_eq!(
+            overlays,
+            vec![
+                Overlay::new("/my config/etc", "/etc"),
+                Overlay::new("files", "/usr/share/x")
+            ]
+        );
+        assert_eq!(
+            parse_overlays(&format_overlays(&overlays)).unwrap(),
+            overlays
+        );
+        assert!(parse_overlays("only-source").is_err());
+
+        let mut p = Project {
+            display_manager: "sddm".into(),
+            autologin_session: "plasma".into(),
+            overlays,
+            ..Default::default()
+        };
+        assert!(p.validate().is_empty(), "{:?}", p.validate());
+        p.overlays.push(Overlay::new("x", "etc"));
+        p.overlays.push(Overlay::new("x", "/etc/../../host"));
+        p.live_user.clear();
+        p.autologin_session = "a;b".into();
+        let errors = p.validate().join("\n");
+        assert_eq!(errors.matches("Overlay target").count(), 2);
+        assert!(errors.contains("needs a live user"));
+        assert!(errors.contains("session"));
+        p.display_manager = "gdm".into();
+        assert!(p.validate().iter().any(|e| e.contains("gdm")));
     }
 
     #[test]

@@ -11,8 +11,9 @@ feature is also available from the command line.
      repositories into a fresh root file system (`pisi --destdir=…`),
   2. runs the COMAR scripts inside a chroot (`pisi configure-pending`),
   3. sets the hostname and the name/version in `/etc/os-release`, creates a
-     live user (optionally with a password) and runs an optional
-     post-install script,
+     live user (optionally with a password), copies overlay files into the
+     image, configures automatic login (SDDM, LightDM, LXDM or MDM) and runs
+     an optional post-install script,
   4. generates a live initramfs with `mkinitcpio` and its own `pisilive`
      hook (finds `live/pisi.sfs` and mounts it with a tmpfs overlay),
   5. compresses the root file system to `live/pisi.sfs` with SquashFS,
@@ -100,12 +101,25 @@ output_iso = "pisi-live.iso"
 squashfs_compression = "xz"         # xz, zstd, gzip, lzo, lz4
 kernel_cmdline = "quiet splash"
 live_initramfs = true               # mkinitcpio + "pisilive" hook
+display_manager = ""                # automatic live login: sddm, lightdm, lxdm, mdm
+autologin_session = ""              # e.g. plasma, xfce (LXDM: a command); empty = first installed session
 post_install_script = ""            # executed with /bin/sh -e in the chroot
 
 [[repositories]]
 name = "pisi-2.0"
 url = "https://stable2.pisilinux.org/pisi-index.xml.xz"
+
+# Files copied into the image (contents of a directory, or a single file)
+# after the live user is created and before the post-install script runs.
+# [[overlays]]
+# source = "/home/me/live-config/calamares"   # on the host
+# target = "/etc/calamares"                   # absolute directory in the image
 ```
+
+Overlay files are owned by root in the image; the home directory of the live
+user is given to the live user afterwards. Files are staged inside the image
+and moved from within the chroot, so symbolic links in the image can not
+redirect a copy onto the host.
 
 Adjust the repository URL to the binary repository you want to build from.
 Inside the work directory the tool uses `rootfs/` and `iso/`; both are
@@ -127,16 +141,35 @@ the command line.
 | `<Title>`                                  | `name`, `volume_label`, `output_iso`; `version` from the first dotted number |
 | `<WorkDir>`                                | `work_dir`                                |
 | `compression` attribute                    | `squashfs_compression`                    |
+| `type` attribute (`Sddm`, `Lightdm`, `Lxdm`, `Mdm`) | `display_manager` (automatic login of the live user) |
 | `<ExtraParameters>`                        | appended to `kernel_cmdline`              |
 | `repo_uri` attributes                      | `repositories` (`pisi`, `pisi-2`, …)      |
 | `<SelectedComponent>`                      | `components`                              |
-| `<SelectedPackage>`                        | `packages` (`kernel` and `mkinitcpio` are added if missing) |
+| `<SelectedPackage>`, `<PluginPackage>`     | `packages` (`kernel` and `mkinitcpio` are added if missing) |
 | `<Package>` (resolved list)                | only used when nothing is selected        |
+| `<ConfigFiles>` directory                  | `overlays` and `post_install_script`, see below |
+
+`<ConfigFiles>` is converted like Pisiman uses it:
+
+| Configuration directory        | Target in the image                     |
+|--------------------------------|-----------------------------------------|
+| `default-settings/etc`         | `/etc`                                  |
+| `default-settings/autostart`   | `/etc/skel/.config/autostart`           |
+| `calamares`                    | `/etc/calamares`                        |
+| `live/sudoers`                 | `/etc/sudoers.d`                        |
+| `live/<desktop>/.config`       | `~<live user>/.config`                  |
+| `live/<desktop>/autostart`     | `~<live user>/.config/autostart`        |
+| `göruntu`                      | `/usr/share/wallpapers/Maia/contents`   |
+| `repo.conf`                    | post-install script: the build repositories are replaced by this repository (`pisi add-repo --no-fetch`) |
+
+If the directory exists on the converting computer only the present entries
+are used, otherwise the standard layout is assumed. Pisiman's boot files
+(`initcpio`, `mkinitcpio-live.conf`, `efi`, `isomounts`, …) are not used
+because Pisi ISO Creator writes its own GRUB menu and live initramfs.
 
 Root, desktop and live CD image selections and package collections are merged
-into one live image. The language selection, `<ConfigFiles>`,
-`<PluginPackage>` and the project `type` have no equivalent; they are reported
-as warnings together with any validation problems.
+into one live image. The language selection has no equivalent; it is reported
+as a warning together with any validation problems.
 
 ## Development
 

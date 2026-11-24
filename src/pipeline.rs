@@ -140,6 +140,8 @@ pub fn build_plan(project: &Project) -> Plan {
                 .arg(&project.live_user),
         ));
     }
+    steps.extend(overlay_steps(&rootfs, project));
+    steps.extend(autologin_steps(&rootfs, project));
     steps.extend(post_install_steps(&rootfs, &project.post_install_script));
     if project.live_initramfs {
         for (kind, contents) in [("install", LIVE_HOOK_INSTALL), ("hooks", LIVE_HOOK_RUNTIME)] {
@@ -470,6 +472,148 @@ fn cleanup_steps(rootfs: &Path) -> Vec<Step> {
     unmount_steps(rootfs)
 }
 
+/// Staging directory (inside the image) for overlay files.
+const OVERLAY_STAGING: &str = "var/tmp/pisi-iso-creator-overlays";
+
+/// Copies the overlays into the image. Files are first copied into a staging
+/// directory (created without following symbolic links) and then moved to
+/// their target from inside the chroot, so symbolic links in the image can
+/// never redirect a copy onto the host.
+fn overlay_steps(rootfs: &Path, project: &Project) -> Vec<Step> {
+    let mut steps = Vec::new();
+    for (i, overlay) in project.overlays.iter().enumerate() {
+        let staging = rootfs.join(OVERLAY_STAGING).join(i.to_string());
+        let target = overlay.target.display().to_string();
+        steps.push(Step::new(
+            format!("Create staging directory for {target}"),
+            Action::CreateMountPoint {
+                root: rootfs.to_path_buf(),
+                path: staging.clone(),
+            },
+        ));
+        steps.push(Step::run(
+            format!("Copy {} into the image", overlay.source.display()),
+            Cmd::new("/bin/sh")
+                .arg("-c")
+                .arg(
+                    "src=$0; [ ! -d \"$src\" ] || src=$src/.; cp -a --no-preserve=ownership -- \"$src\" \"$1\"/",
+                )
+                .arg(&overlay.source)
+                .arg(&staging),
+        ));
+        steps.push(Step::run(
+            format!("Install files to {target}"),
+            chroot(rootfs, "/bin/sh")
+                .arg("-c")
+                .arg("mkdir -p -- \"$1\" && cp -a -- \"$0\"/. \"$1\"/")
+                .arg(format!("/{OVERLAY_STAGING}/{i}"))
+                .arg(&overlay.target),
+        ));
+    }
+    if !project.overlays.is_empty() {
+        steps.push(Step::run(
+            "Remove overlay staging directory",
+            chroot(rootfs, "rm")
+                .arg("-rf")
+                .arg(format!("/{OVERLAY_STAGING}")),
+        ));
+        if !project.live_user.is_empty() {
+            steps.push(Step::run(
+                format!("Give the home directory to '{}'", project.live_user),
+                chroot(rootfs, "/bin/sh")
+                    .arg("-c")
+                    .arg("h=$(getent passwd \"$0\" | cut -d: -f6) && [ -d \"$h\" ] && chown -R \"$0\": \"$h\"")
+                    .arg(&project.live_user),
+            ));
+        }
+    }
+    steps
+}
+
+/// Configures the display manager to log in the live user automatically.
+fn autologin_steps(rootfs: &Path, project: &Project) -> Vec<Step> {
+    let script = match project.display_manager.as_str() {
+        "sddm" => AUTOLOGIN_SDDM,
+        "lightdm" => AUTOLOGIN_LIGHTDM,
+        "lxdm" => AUTOLOGIN_LXDM,
+        "mdm" => AUTOLOGIN_MDM,
+        _ => return vec![],
+    };
+    if project.live_user.is_empty() {
+        return vec![];
+    }
+    vec![Step::run(
+        format!(
+            "Configure automatic login of '{}' ({})",
+            project.live_user, project.display_manager
+        ),
+        chroot(rootfs, "/bin/sh")
+            .args(["-e", "-c"])
+            .arg(format!("{AUTOLOGIN_FIND_SESSION}{script}"))
+            .arg(&project.live_user)
+            .arg(&project.autologin_session),
+    )]
+}
+
+/// Shared prologue of the automatic login scripts: `$u` is the user, `$s`
+/// the session name without `.desktop` (the first installed X11 or Wayland
+/// session if none was given).
+const AUTOLOGIN_FIND_SESSION: &str = r#"u=$0 s=${1%.desktop}
+find_session() {
+    [ -z "$s" ] || return 0
+    for f in /usr/share/xsessions/*.desktop /usr/share/wayland-sessions/*.desktop; do
+        [ -e "$f" ] || continue
+        s=$(basename "$f" .desktop)
+        return 0
+    done
+    echo "No X11 or Wayland session found for the automatic login!" >&2
+    exit 1
+}
+"#;
+
+const AUTOLOGIN_SDDM: &str = r#"find_session
+mkdir -p /etc/sddm.conf.d
+printf '[Autologin]
+User=%s
+Session=%s.desktop
+' "$u" "$s" > /etc/sddm.conf.d/zz-pisi-live-autologin.conf
+# /etc/sddm.conf is read last and would override the drop-in file.
+if [ -f /etc/sddm.conf ]; then
+    sed -i -e "s|^User=.*|User=$u|" -e "s|^Session=.*|Session=$s.desktop|" /etc/sddm.conf
+fi
+"#;
+
+const AUTOLOGIN_LIGHTDM: &str = r#"find_session
+mkdir -p /etc/lightdm/lightdm.conf.d
+printf '[Seat:*]
+autologin-user=%s
+autologin-session=%s
+' "$u" "$s" > /etc/lightdm/lightdm.conf.d/50-pisi-live-autologin.conf
+groupadd -f -r autologin
+usermod -a -G autologin "$u"
+"#;
+
+const AUTOLOGIN_LXDM: &str = r#"f=/etc/lxdm/lxdm.conf
+[ -f "$f" ] || { echo "$f not found, is LXDM installed?" >&2; exit 1; }
+if grep -q '^#* *autologin=' "$f"; then
+    sed -i "s|^#* *autologin=.*|autologin=$u|" "$f"
+else
+    sed -i "/^\[base\]/a autologin=$u" "$f"
+fi
+# LXDM sessions are commands, e.g. /usr/bin/startxfce4.
+if [ -n "$1" ]; then
+    sed -i "s|^#* *session=.*|session=$1|" "$f"
+fi
+"#;
+
+const AUTOLOGIN_MDM: &str = r#"find_session
+f=/usr/share/mdm/distro.conf
+[ -f "$f" ] || { echo "$f not found, is MDM installed?" >&2; exit 1; }
+sed -i -e 's|^#* *AutomaticLoginEnable=.*|AutomaticLoginEnable=true|' \
+    -e "s|^#* *AutomaticLogin=.*|AutomaticLogin=$u|" \
+    -e "s|^#* *DefaultSession=.*|DefaultSession=$s.desktop|" "$f"
+"#;
+
 /// The script is passed as an argument to `sh -c`, so nothing is written
 /// into the (possibly untrusted) image.
 fn post_install_steps(rootfs: &Path, script: &str) -> Vec<Step> {
@@ -667,6 +811,56 @@ mod tests {
         )));
         assert_eq!(plan.cleanup.len(), 5);
         assert!(plan.describe().contains("grub.cfg"));
+    }
+
+    #[test]
+    fn build_plan_copies_overlays_and_configures_autologin() {
+        let project = Project {
+            work_dir: "/w".into(),
+            display_manager: "sddm".into(),
+            overlays: vec![crate::project::Overlay::new(
+                "/cfg/calamares",
+                "/etc/calamares",
+            )],
+            post_install_script: "echo hi".into(),
+            ..Default::default()
+        };
+        let plan = build_plan(&project);
+        let cmds = commands(&plan);
+        let pos = |needle: &str| {
+            cmds.iter()
+                .position(|c| c.contains(needle))
+                .unwrap_or_else(|| panic!("missing {needle} in {cmds:#?}"))
+        };
+        let order = [
+            "useradd -m",
+            "/cfg/calamares /w/rootfs/var/tmp/pisi-iso-creator-overlays/0",
+            "/var/tmp/pisi-iso-creator-overlays/0 /etc/calamares",
+            "rm -rf /var/tmp/pisi-iso-creator-overlays",
+            "chown -R",
+            "sddm.conf.d",
+            "echo hi",
+        ];
+        for pair in order.windows(2) {
+            assert!(
+                pos(pair[0]) < pos(pair[1]),
+                "{} before {}",
+                pair[0],
+                pair[1]
+            );
+        }
+        assert!(plan.steps.iter().any(|s| matches!(
+            &s.action,
+            Action::CreateMountPoint { path, .. }
+                if path == Path::new("/w/rootfs/var/tmp/pisi-iso-creator-overlays/0")
+        )));
+
+        let none = commands(&build_plan(&Project::default()));
+        assert!(
+            !none
+                .iter()
+                .any(|c| c.contains("overlays") || c.contains("Autologin"))
+        );
     }
 
     #[test]
