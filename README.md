@@ -26,6 +26,8 @@ feature is also available from the command line.
 - **Repository browser** – loads a `pisi-index.xml` or `pisi-index.xml.xz`
   (URL or local file, binary and source indexes), searches packages and adds
   them to the project with a click.
+- **Pisiman import** – converts a Pisiman project file (`<PisiManProject>`
+  XML) into a TOML project (see [Pisiman Import](#pisiman-import)).
 - **Dry run and plan view** – shows every command before anything is executed.
 - Live, streaming build log, progress and cancellation; mounts are always
   cleaned up, even after failures.
@@ -72,6 +74,7 @@ Command line usage:
 
 ```text
 pisi-iso-creator new <project.toml>                       write a default project
+pisi-iso-creator import-pisiman <pisiman.xml> [project.toml]  convert a Pisiman project
 pisi-iso-creator build <project.toml> [--dry-run|--plan]  build an ISO
 pisi-iso-creator edit <edit-job.toml> [--dry-run|--plan]  edit an existing ISO
 pisi-iso-creator search <index URL or path> [query]       search a PiSi repository
@@ -108,6 +111,33 @@ Adjust the repository URL to the binary repository you want to build from.
 Inside the work directory the tool uses `rootfs/` and `iso/`; both are
 recreated on every run.
 
+## Pisiman Import
+
+```sh
+pisi-iso-creator import-pisiman Pisilinux-KDE.xml          # writes Pisilinux-KDE.toml
+```
+
+In the graphical interface enter the path of the XML file as the project file
+and click **Import Pisiman**; check the result and click **Save** (the path is
+changed to the `.toml` file). An existing TOML file is never overwritten by
+the command line.
+
+| Pisiman                                    | Project                                   |
+|--------------------------------------------|-------------------------------------------|
+| `<Title>`                                  | `name`, `volume_label`, `output_iso`; `version` from the first dotted number |
+| `<WorkDir>`                                | `work_dir`                                |
+| `compression` attribute                    | `squashfs_compression`                    |
+| `<ExtraParameters>`                        | appended to `kernel_cmdline`              |
+| `repo_uri` attributes                      | `repositories` (`pisi`, `pisi-2`, …)      |
+| `<SelectedComponent>`                      | `components`                              |
+| `<SelectedPackage>`                        | `packages` (`kernel` and `mkinitcpio` are added if missing) |
+| `<Package>` (resolved list)                | only used when nothing is selected        |
+
+Root, desktop and live CD image selections and package collections are merged
+into one live image. The language selection, `<ConfigFiles>`,
+`<PluginPackage>` and the project `type` have no equivalent; they are reported
+as warnings together with any validation problems.
+
 ## Development
 
 ```sh
@@ -120,6 +150,7 @@ Source layout:
 
 - `src/project.rs` – project / edit job model, validation, TOML I/O
 - `src/pisi.rs` – PiSi command lines and repository index parser
+- `src/pisiman.rs` – Pisiman project (XML) conversion
 - `src/pipeline.rs` – creator and editor build plans, GRUB configuration
 - `src/command.rs` – step executor (logging, dry run, cancellation, cleanup)
 - `src/gui.rs`, `ui/app.slint` – Slint user interface

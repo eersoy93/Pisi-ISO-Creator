@@ -235,6 +235,7 @@ export component AppWindow inherits Window {
 
     callback new-project();
     callback open-project();
+    callback import-pisiman();
     callback save-project();
     callback validate-project();
     callback show-plan();
@@ -331,6 +332,7 @@ export component AppWindow inherits Window {
                                     Button { text: "New"; clicked => { root.new-project(); } }
                                     Button { text: "Open"; clicked => { root.open-project(); } }
                                     Button { text: "Save"; clicked => { root.save-project(); } }
+                                    Button { text: "Import Pisiman"; clicked => { root.import-pisiman(); } }
                                 }
                                 HorizontalLayout {
                                     spacing: 12px;

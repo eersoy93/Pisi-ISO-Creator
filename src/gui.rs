@@ -3,6 +3,7 @@
 use crate::command::{Event, EventSink, Executor, Plan};
 use crate::pipeline::{build_plan, edit_plan};
 use crate::pisi::{self, RepoIndex};
+use crate::pisiman;
 use crate::project::{
     EditJob, Project, format_list, format_repositories, parse_list, parse_repositories,
 };
@@ -66,6 +67,29 @@ pub fn run() -> Result<(), slint::PlatformError> {
             Ok(p) => {
                 project_to_ui(&ui, &p);
                 ui.set_status_text(format!("Opened {}", path.display()).into());
+            }
+            Err(e) => ui.set_status_text(format!("Error: {e}").into()),
+        }
+    });
+
+    let weak = ui.as_weak();
+    ui.on_import_pisiman(move || {
+        let ui = weak.unwrap();
+        let path = PathBuf::from(ui.get_project_path().as_str());
+        match pisiman::convert_file(&path) {
+            Ok(c) => {
+                project_to_ui(&ui, &c.project);
+                let target = path.with_extension("toml");
+                ui.set_project_path(target.display().to_string().into());
+                let mut text = format!(
+                    "Imported Pisiman project {}. Check it and save it as {}.",
+                    path.display(),
+                    target.display()
+                );
+                if !c.warnings.is_empty() {
+                    text.push_str(&format!("\n• {}", c.warnings.join("\n• ")));
+                }
+                ui.set_status_text(text.into());
             }
             Err(e) => ui.set_status_text(format!("Error: {e}").into()),
         }

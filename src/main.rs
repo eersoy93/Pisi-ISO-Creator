@@ -5,6 +5,7 @@ mod command;
 mod gui;
 mod pipeline;
 mod pisi;
+mod pisiman;
 mod project;
 
 use command::{Event, EventSink, Executor};
@@ -21,6 +22,8 @@ Pisi ISO Creator - create and edit Pisi GNU/Linux ISO images
 Usage:
   pisi-iso-creator                          Start the graphical interface
   pisi-iso-creator new <project.toml>       Write a default project file
+  pisi-iso-creator import-pisiman <pisiman.xml> [project.toml]
+                                            Convert a Pisiman project file
   pisi-iso-creator build <project.toml> [--dry-run | --plan]
   pisi-iso-creator edit <edit-job.toml> [--dry-run | --plan]
   pisi-iso-creator search <pisi-index.xml[.xz] URL or path> [query]
@@ -85,6 +88,22 @@ fn run_cli(args: &[String]) -> Result<(), String> {
             }
             Project::default().save(&path)?;
             println!("Wrote {}", path.display());
+            return Ok(());
+        }
+        ["import-pisiman", xml, rest @ ..] if rest.len() <= 1 => {
+            let xml = PathBuf::from(xml);
+            let out = rest
+                .first()
+                .map_or_else(|| xml.with_extension("toml"), PathBuf::from);
+            if out.exists() {
+                return Err(format!("{} already exists!", out.display()));
+            }
+            let conversion = pisiman::convert_file(&xml)?;
+            for warning in &conversion.warnings {
+                eprintln!("Warning: {warning}");
+            }
+            conversion.project.save(&out)?;
+            println!("Wrote {}", out.display());
             return Ok(());
         }
         ["build", path] => {
